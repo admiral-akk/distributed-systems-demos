@@ -3,4 +3,5 @@ members = [
     "dinner-party-async",
     "dinner-party",
     "threads",
+    "raft-async"
 ]
