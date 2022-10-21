@@ -27,11 +27,11 @@ impl Philosopher {
         let mut attempts = 0;
         loop {
             println!("{} is trying to get left!", self.name);
-            if let Some(left_fork) = left.try_lock() {
+            if let Some(_left_fork) = left.try_lock() {
                 println!("{} has left!", self.name);
                 sleep(Duration::from_millis(100)).await;
                 println!("{} is trying to get right!", self.name);
-                if let Some(right_fork) = right.try_lock() {
+                if let Some(_right_fork) = right.try_lock() {
                     println!("{} has right!", self.name);
                     println!("{} is eating!", self.name);
                     return;
