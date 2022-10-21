@@ -18,6 +18,12 @@ impl ToString for Philosopher {
     }
 }
 
+impl Philosopher {
+    pub fn new(name: String) -> Self {
+        Self { name }
+    }
+}
+
 pub trait Eat {
     fn try_eat(&self, left: Arc<Mutex<Fork>>, right: Arc<Mutex<Fork>>);
     fn backoff(&self, attempts: u32) {
@@ -51,11 +57,5 @@ impl Eat for Philosopher {
             attempts += 1;
             self.backoff(attempts);
         }
-    }
-}
-
-impl Philosopher {
-    pub fn new(name: String) -> Self {
-        Self { name }
     }
 }

@@ -1,6 +1,4 @@
-
 use std::thread;
-
 
 use philosopher::Philosopher;
 use rand::Rng;
