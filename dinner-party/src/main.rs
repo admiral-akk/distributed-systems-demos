@@ -1,7 +1,7 @@
-use std::sync::Mutex;
+
 use std::thread;
 
-use fork::Fork;
+
 use philosopher::Philosopher;
 use rand::Rng;
 use std::fs;
@@ -26,7 +26,7 @@ fn main() {
     let philosophers = names
         .iter()
         .enumerate()
-        .map(|(index, name)| {
+        .map(|(_index, name)| {
             let name = name.to_string();
             let arrival_delay = rand::thread_rng().gen_range(1..4000);
             let table = table.clone();

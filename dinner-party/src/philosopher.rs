@@ -24,7 +24,7 @@ pub trait Eat {
         let backoff = rand::thread_rng().gen_range(10..(128 << attempts));
         thread::sleep(Duration::from_millis(backoff));
     }
-    fn eat(&self, left: &MutexGuard<Fork>, right: &MutexGuard<Fork>) {
+    fn eat(&self, _left: &MutexGuard<Fork>, _right: &MutexGuard<Fork>) {
         thread::sleep(Duration::from_millis(1000));
     }
 }

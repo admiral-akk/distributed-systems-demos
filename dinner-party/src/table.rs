@@ -22,7 +22,7 @@ impl Table {
 
     pub fn sit(
         &mut self,
-        philosopher: &Philosopher,
+        _philosopher: &Philosopher,
     ) -> Receiver<(Arc<Mutex<Fork>>, Arc<Mutex<Fork>>)> {
         let (sender, reciever) = mpsc::channel();
         self.channels.push(sender);
