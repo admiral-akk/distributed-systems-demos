@@ -101,6 +101,25 @@ impl RaftServer {
         }
     }
 
+    pub async fn kill_leader(state: Arc<Mutex<ServerState>>) {
+        loop {
+            let rand_sleep =
+                rand::thread_rng().gen_range((3 * HEARTBEAT_LENGTH)..(5 * HEARTBEAT_LENGTH));
+            task::sleep(rand_sleep).await;
+            {
+                let mut state = state.lock().await;
+                state.state = RaftState::Offline;
+            }
+            let rand_sleep =
+                rand::thread_rng().gen_range((HEARTBEAT_LENGTH)..(2 * HEARTBEAT_LENGTH));
+            task::sleep(rand_sleep).await;
+            {
+                let mut state = state.lock().await;
+                state.state = RaftState::Follower {};
+            }
+        }
+    }
+
     pub async fn handle(
         state: Arc<Mutex<ServerState>>,
         channel: Arc<Mutex<RaftChannel>>,
@@ -167,6 +186,7 @@ impl RaftServer {
             self.state.clone(),
             self.channel.clone(),
         ));
+        task::spawn(RaftServer::kill_leader(self.state.clone()));
         task::spawn(RaftServer::handle(
             self.state.clone(),
             self.channel.clone(),
