@@ -1,8 +1,31 @@
-mod log_entry;
+use async_std::task;
+use raft_server::RaftServer;
+
+mod raft_channel;
 mod raft_request;
 mod raft_server;
-mod server_state;
+mod raft_socket;
 
 fn main() {
-    println!("Hello, world!");
+    let servers = (0..5).map(|i| RaftServer::new(i)).collect::<Vec<_>>();
+    for i in 0..5 {
+        for j in 0..5 {
+            if i == j {
+                continue;
+            }
+            let mut c1 = task::block_on(async { servers[i].channel.lock().await });
+            let mut c2 = task::block_on(async { servers[j].socket.lock().await });
+            c1.register_socket(&mut c2);
+        }
+    }
+
+    let mut joins = Vec::new();
+    for mut server in servers {
+        joins.push(task::spawn(async move {
+            server.start().await;
+        }));
+    }
+    for join in joins {
+        task::block_on(join);
+    }
 }
