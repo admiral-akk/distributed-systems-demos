@@ -1,7 +1,7 @@
 use std::{collections::HashMap, time::Duration};
 
 use async_std::{
-    channel::{unbounded, Receiver, SendError, Sender},
+    channel::{SendError, Sender},
     task,
 };
 use rand::Rng;
