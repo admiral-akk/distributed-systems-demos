@@ -9,19 +9,14 @@ use rand::Rng;
 use crate::{raft_request::RaftRequest, raft_socket::RaftSocket};
 
 pub struct RaftChannel {
-    reciever: Receiver<RaftRequest>,
     pub id: u32,
-    self_sender: Sender<RaftRequest>,
     senders: HashMap<u32, Sender<RaftRequest>>,
 }
 
 impl RaftChannel {
     pub fn new(id: u32) -> Self {
-        let (self_sender, reciever) = unbounded();
         Self {
-            reciever,
             id,
-            self_sender,
             senders: HashMap::new(),
         }
     }

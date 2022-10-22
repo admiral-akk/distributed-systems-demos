@@ -89,13 +89,14 @@ impl RaftServer {
                 };
                 state.persistent_state.voted_for = Some(channel.id);
                 state.persistent_state.current_term += 1;
-                let result = channel
+                channel
                     .broadcast(RaftRequest {
                         term: state.persistent_state.current_term,
                         sender: 0,
                         request: RequestType::Vote {},
                     })
-                    .await;
+                    .await
+                    .unwrap();
             }
         }
     }
@@ -122,7 +123,8 @@ impl RaftServer {
                     match response {
                         RaftResponse::Target { id, response } => channel.send(id, response).await,
                         RaftResponse::Broadcast { response } => channel.broadcast(response).await,
-                    };
+                    }
+                    .unwrap();
                 }
             }
         }
@@ -145,7 +147,8 @@ impl RaftServer {
                             sender: 0,
                             request: RequestType::Append {},
                         })
-                        .await;
+                        .await
+                        .unwrap();
                 }
             }
         }

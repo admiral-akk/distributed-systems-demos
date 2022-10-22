@@ -1,10 +1,4 @@
-use std::{collections::HashMap, time::Duration};
-
-use async_std::{
-    channel::{self, Receiver, Sender},
-    task,
-};
-use rand::Rng;
+use async_std::channel::{self, Receiver, Sender};
 
 use crate::raft_request::RaftRequest;
 
