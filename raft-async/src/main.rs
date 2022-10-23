@@ -14,8 +14,8 @@ fn main() {
             if i == j {
                 continue;
             }
-            let mut c1 = task::block_on(async { servers[i].channel.lock().await });
-            let mut c2 = task::block_on(async { servers[j].socket.lock().await });
+            let mut c1 = task::block_on(async { servers[i].output.lock().await });
+            let mut c2 = task::block_on(async { servers[j].input.lock().await });
             c1.register_socket(&mut c2);
         }
     }

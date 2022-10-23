@@ -121,8 +121,8 @@ where
     DataType: Copy + Clone + Debug,
 {
     pub state: Arc<Mutex<ServerState<DataType>>>,
-    pub socket: Arc<Mutex<RaftSocket<DataType>>>,
-    pub channel: Arc<Mutex<RaftChannel<DataType>>>,
+    pub input: Arc<Mutex<RaftSocket<DataType>>>,
+    pub output: Arc<Mutex<RaftChannel<DataType>>>,
 }
 
 pub enum RaftResponse<DataType>
@@ -145,13 +145,13 @@ where
     pub fn new(id: u32) -> Self {
         Self {
             state: Arc::new(Mutex::new(ServerState::default())),
-            socket: Arc::new(Mutex::new(RaftSocket::new(id))),
-            channel: Arc::new(Mutex::new(RaftChannel::new(id))),
+            input: Arc::new(Mutex::new(RaftSocket::new(id))),
+            output: Arc::new(Mutex::new(RaftChannel::new(id))),
         }
     }
     pub async fn heartbeat(
         state: Arc<Mutex<ServerState<DataType>>>,
-        channel: Arc<Mutex<RaftChannel<DataType>>>,
+        output: Arc<Mutex<RaftChannel<DataType>>>,
     ) {
         loop {
             let rand_sleep =
@@ -167,7 +167,7 @@ where
                 {
                     continue;
                 }
-                let channel = channel.lock().await;
+                let channel = output.lock().await;
                 state.state = RaftState::Candidate {
                     votes: HashSet::from([channel.id]),
                     volitile: state.persistent_state.volitile_start_state(),
@@ -215,17 +215,17 @@ where
 
     pub async fn handle(
         state: Arc<Mutex<ServerState<DataType>>>,
-        channel: Arc<Mutex<RaftChannel<DataType>>>,
-        socket: Arc<Mutex<RaftSocket<DataType>>>,
+        input: Arc<Mutex<RaftSocket<DataType>>>,
+        output: Arc<Mutex<RaftChannel<DataType>>>,
     ) {
         loop {
             let request;
             {
-                request = socket.lock().await.reciever.recv().await;
+                request = input.lock().await.reciever.recv().await;
             }
             if let Ok(request) = request {
                 let mut state = state.lock().await;
-                let channel = channel.lock().await;
+                let channel = output.lock().await;
                 println!(
                     "Recieved request: {:?}, state: {:?}, reciever: {}",
                     request, state, channel.id
@@ -247,7 +247,7 @@ where
 
     pub async fn leader_heartbeat(
         state: Arc<Mutex<ServerState<DataType>>>,
-        channel: Arc<Mutex<RaftChannel<DataType>>>,
+        output: Arc<Mutex<RaftChannel<DataType>>>,
     ) {
         loop {
             task::sleep(201 * HEARTBEAT_LENGTH / 3210).await;
@@ -258,7 +258,7 @@ where
                         let request = RequestType::heartbeat(&state.persistent_state, volitile);
                         state.last_heartbeat = SystemTime::now();
 
-                        let channel = channel.lock().await;
+                        let channel = output.lock().await;
                         channel
                             .broadcast(RaftRequest {
                                 term: state.persistent_state.current_term,
@@ -287,17 +287,17 @@ where
         }
         task::spawn(RaftServer::heartbeat(
             self.state.clone(),
-            self.channel.clone(),
+            self.output.clone(),
         ));
         task::spawn(RaftServer::leader_heartbeat(
             self.state.clone(),
-            self.channel.clone(),
+            self.output.clone(),
         ));
         task::spawn(RaftServer::kill_leader(self.state.clone()));
         task::spawn(RaftServer::handle(
             self.state.clone(),
-            self.channel.clone(),
-            self.socket.clone(),
+            self.input.clone(),
+            self.output.clone(),
         ))
         .await;
     }
