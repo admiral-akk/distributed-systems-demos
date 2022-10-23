@@ -26,6 +26,7 @@ pub enum RaftState {
         votes: HashSet<u32>,
     },
     Leader {
+        leader_volitile: VolitileLeaderState,
         volitile: VolitileState,
     },
 }
@@ -34,6 +35,18 @@ pub enum RaftState {
 pub struct VolitileState {
     pub commit_index: usize,
     pub last_applied: usize,
+}
+
+impl VolitileState {
+    pub fn leader_start_state(&self) -> VolitileLeaderState {
+        VolitileLeaderState::default()
+    }
+}
+
+#[derive(PartialEq, Default, Debug)]
+pub struct VolitileLeaderState {
+    pub next_index: Vec<usize>,
+    pub match_index: Vec<usize>,
 }
 
 #[derive(Default, Debug)]
@@ -197,7 +210,10 @@ impl<DataType: Debug + Send + 'static> RaftServer<DataType> {
             {
                 let mut state = state.lock().await;
                 match &state.state {
-                    RaftState::Leader { volitile } => {
+                    RaftState::Leader {
+                        leader_volitile,
+                        volitile,
+                    } => {
                         state.last_heartbeat = SystemTime::now();
                         let channel = channel.lock().await;
                         channel
@@ -316,8 +332,10 @@ impl<DataType> ServerState<DataType> {
                         }
                         if votes.len() > server_count / 2 {
                             self.persistent_state.current_term += 1;
+                            let volitile = self.persistent_state.volitile_start_state();
                             self.state = RaftState::Leader {
-                                volitile: self.persistent_state.volitile_start_state(),
+                                leader_volitile: volitile.leader_start_state(),
+                                volitile,
                             };
                             self.last_heartbeat = SystemTime::now();
                             return Some(RaftResponse::Broadcast {
@@ -336,7 +354,10 @@ impl<DataType> ServerState<DataType> {
                 }
             }
             // Leaders just care that their commands are sucessful. If they ever fail, they get sad and quit their job.
-            RaftState::Leader { volitile } => {
+            RaftState::Leader {
+                leader_volitile,
+                volitile,
+            } => {
                 match request.request {
                     RequestType::AppendResponse { success } => {
                         if !success {
