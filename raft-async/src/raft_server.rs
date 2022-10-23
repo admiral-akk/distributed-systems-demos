@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fmt::Debug,
     time::{Duration, SystemTime},
 };
@@ -38,15 +38,21 @@ pub struct VolitileState {
 }
 
 impl VolitileState {
-    pub fn leader_start_state(&self) -> VolitileLeaderState {
-        VolitileLeaderState::default()
+    pub fn leader_start_state(&self, followers: Vec<u32>) -> VolitileLeaderState {
+        VolitileLeaderState {
+            next_index: followers
+                .iter()
+                .map(|id| (*id, self.last_applied + 1))
+                .collect(),
+            match_index: followers.iter().map(|id| (*id, 0)).collect(),
+        }
     }
 }
 
 #[derive(PartialEq, Default, Debug)]
 pub struct VolitileLeaderState {
-    pub next_index: Vec<usize>,
-    pub match_index: Vec<usize>,
+    pub next_index: HashMap<u32, usize>,
+    pub match_index: HashMap<u32, usize>,
 }
 
 #[derive(Default, Debug)]
@@ -186,7 +192,7 @@ impl<DataType: Debug + Send + 'static> RaftServer<DataType> {
                     "Recieved request: {:?}, state: {:?}, reciever: {}",
                     request, state, channel.id
                 );
-                let response = state.handle(request, channel.server_count(), SystemTime::now());
+                let response = state.handle(request, channel.servers(), SystemTime::now());
                 if let Some(response) = response {
                     match response {
                         RaftResponse::Target { id, response } => {
@@ -264,7 +270,7 @@ impl<DataType> ServerState<DataType> {
     pub fn handle(
         &mut self,
         request: RaftRequest,
-        server_count: usize,
+        servers: Vec<u32>,
         time: SystemTime,
     ) -> Option<RaftResponse> {
         if request.term > self.persistent_state.current_term {
@@ -330,11 +336,11 @@ impl<DataType> ServerState<DataType> {
                             println!("Recieved vote!");
                             votes.insert(request.sender);
                         }
-                        if votes.len() > server_count / 2 {
+                        if votes.len() > (servers.len() + 1) / 2 {
                             self.persistent_state.current_term += 1;
                             let volitile = self.persistent_state.volitile_start_state();
                             self.state = RaftState::Leader {
-                                leader_volitile: volitile.leader_start_state(),
+                                leader_volitile: volitile.leader_start_state(servers),
                                 volitile,
                             };
                             self.last_heartbeat = SystemTime::now();

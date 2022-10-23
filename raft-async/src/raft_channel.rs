@@ -53,7 +53,7 @@ impl RaftChannel {
         Ok(())
     }
 
-    pub fn server_count(&self) -> usize {
-        self.senders.len() + 1
+    pub fn servers(&self) -> Vec<u32> {
+        self.senders.keys().map(|id| *id).collect()
     }
 }
