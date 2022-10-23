@@ -2,6 +2,7 @@ use std::{collections::HashMap, time::Duration};
 
 use async_std::{
     channel::{SendError, Sender},
+    sync::Arc,
     task,
 };
 use rand::Rng;
@@ -14,12 +15,12 @@ where
     DataType: Copy + Clone + Debug,
 {
     pub id: u32,
-    senders: HashMap<u32, Sender<RaftRequest<DataType>>>,
+    senders: HashMap<u32, Arc<Sender<RaftRequest<DataType>>>>,
 }
 
 impl<DataType> RaftChannel<DataType>
 where
-    DataType: Copy + Clone + Debug,
+    DataType: Copy + Clone + Debug + Send + 'static,
 {
     pub fn new(id: u32) -> Self {
         Self {
@@ -29,7 +30,8 @@ where
     }
 
     pub fn register_socket(&mut self, other: &mut RaftSocket<DataType>) {
-        self.senders.insert(other.id, other.sender.clone());
+        self.senders
+            .insert(other.id, Arc::new(other.sender.clone()));
     }
 
     pub async fn send(
@@ -38,13 +40,18 @@ where
         mut message: RaftRequest<DataType>,
     ) -> Result<(), SendError<RaftRequest<DataType>>> {
         message.sender = self.id;
-        self.random_delay().await;
+        println!("Sending:\n{:?}", message);
         if let Some(sender) = self.senders.get(&target_id) {
-            println!("Sending:\n{:?}", message);
-            sender.send(message).await?;
+            let delay = Duration::from_millis(rand::thread_rng().gen_range(50..1000));
+            let sender = sender.clone();
+            task::spawn(async move {
+                task::sleep(delay).await;
+                sender.send(message).await;
+            });
         }
         Ok(())
     }
+
     async fn random_delay(&self) {
         let rand_len = rand::thread_rng().gen_range(50..1000);
         task::sleep(Duration::from_millis(rand_len)).await;
@@ -55,10 +62,15 @@ where
         mut message: RaftRequest<DataType>,
     ) -> Result<(), SendError<RaftRequest<DataType>>> {
         message.sender = self.id;
-        self.random_delay().await;
         println!("Broadcasting:\n{:?}", message);
         for (_, sender) in &self.senders {
-            sender.send(message).await?;
+            let delay = Duration::from_millis(rand::thread_rng().gen_range(50..1000));
+            let sender = sender.clone();
+            let message = message.clone();
+            task::spawn(async move {
+                task::sleep(delay).await;
+                sender.send(message).await;
+            });
         }
         Ok(())
     }
