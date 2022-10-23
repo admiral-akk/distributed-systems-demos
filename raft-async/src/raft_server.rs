@@ -34,7 +34,6 @@ pub enum RaftState {
 #[derive(PartialEq, Default, Debug, Copy, Clone)]
 pub struct VolitileState {
     pub commit_index: usize,
-    pub last_applied: usize,
 }
 
 impl VolitileState {
@@ -42,7 +41,7 @@ impl VolitileState {
         VolitileLeaderState {
             next_index: followers
                 .iter()
-                .map(|id| (*id, self.last_applied + 1))
+                .map(|id| (*id, self.commit_index + 1))
                 .collect(),
             match_index: followers.iter().map(|id| (*id, 0)).collect(),
         }
@@ -314,11 +313,12 @@ where
         servers: Vec<u32>,
         time: SystemTime,
     ) -> Option<RaftResponse<DataType>> {
+        // This conviniently implements the heartbeat.
         if request.term > self.persistent_state.current_term {
             self.state = RaftState::Follower {
                 volitile: self.persistent_state.volitile_start_state(),
             };
-            self.last_heartbeat = SystemTime::now();
+            self.last_heartbeat = time;
             self.persistent_state.voted_for = None;
             self.persistent_state.current_term = request.term;
         }
@@ -333,11 +333,40 @@ where
                         entry,
                     } => {
                         // If the term is behind, we have a leader from the last round.
-                        let success = request.term >= self.persistent_state.current_term;
+                        let mut success = request.term >= self.persistent_state.current_term;
+                        if prev_length > 0 {
+                            if let Some(entry) = self.persistent_state.entry(prev_length - 1) {
+                                success &= entry.term == prev_term;
+                            }
+                        }
 
                         if success {
-                            // Reset the heartbeat, since our dear leader is alive.
-                            self.last_heartbeat = time;
+                            // Update the current leader.
+                            self.persistent_state.voted_for = Some(request.sender);
+                            if let Some(entry) = entry {
+                                if self.persistent_state.log_length() > 0 {
+                                    if let Some(local_entry) =
+                                        self.persistent_state.entry(prev_length)
+                                    {
+                                        if local_entry.term != entry.term {
+                                            self.persistent_state.log.drain(
+                                                prev_length..self.persistent_state.log.len(),
+                                            );
+                                        }
+                                    }
+                                }
+                                match self.persistent_state.log.len() == prev_length {
+                                    true => {
+                                        self.persistent_state.log.push(entry);
+                                    }
+                                    false => {
+                                        self.persistent_state.log[prev_length] = entry;
+                                    }
+                                }
+                            }
+                            if commit_index > volitile.commit_index {
+                                volitile.commit_index = commit_index.min(prev_length);
+                            }
                         }
 
                         return Some(RaftResponse::Target {
@@ -421,19 +450,22 @@ where
                     _ => None,
                 }
             }
-            // Leaders just care that their commands are sucessful. If they ever fail, they get sad and quit their job.
             RaftState::Leader {
                 leader_volitile,
                 volitile,
             } => {
                 match request.request {
                     RequestType::AppendResponse { success } => {
-                        if !success {
-                            self.state = RaftState::Follower {
-                                volitile: self.persistent_state.volitile_start_state(),
-                            };
-                            self.last_heartbeat = SystemTime::now();
-                            self.persistent_state.voted_for = None;
+                        let index = leader_volitile.next_index[&request.sender];
+                        match success {
+                            true => {
+                                leader_volitile.next_index.insert(request.sender, index + 1);
+                            }
+                            false => {
+                                if index > 0 {
+                                    leader_volitile.next_index.insert(request.sender, index - 1);
+                                }
+                            }
                         }
                         return None;
                     }
