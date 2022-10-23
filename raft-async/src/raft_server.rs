@@ -25,12 +25,18 @@ pub enum RaftState {
     Leader,
 }
 
+#[derive(Default, Debug)]
+struct LogEntry<DataType> {
+    data: DataType,
+    term: u32,
+}
+
 // This state is written to disc (or somewhere else safe) before any request is sent out.
 #[derive(Default, Debug)]
 pub struct PersistentState<DataType> {
     current_term: u32,
     voted_for: Option<u32>,
-    log: Vec<DataType>,
+    log: Vec<LogEntry<DataType>>,
 }
 
 const HEARTBEAT_LENGTH: Duration = Duration::from_millis(2000);
