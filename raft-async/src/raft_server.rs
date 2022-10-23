@@ -10,7 +10,7 @@ use rand::Rng;
 
 use crate::{
     raft_channel::RaftChannel,
-    raft_request::{RaftRequest, RequestType},
+    raft_request::{LogEntry, RaftRequest, RequestType},
     raft_socket::RaftSocket,
 };
 
@@ -31,7 +31,7 @@ pub enum RaftState {
     },
 }
 
-#[derive(PartialEq, Default, Debug)]
+#[derive(PartialEq, Default, Debug, Copy, Clone)]
 pub struct VolitileState {
     pub commit_index: usize,
     pub last_applied: usize,
@@ -55,12 +55,6 @@ pub struct VolitileLeaderState {
     pub match_index: HashMap<u32, usize>,
 }
 
-#[derive(Default, Debug)]
-struct LogEntry<DataType> {
-    data: DataType,
-    term: u32,
-}
-
 // This state is written to disc (or somewhere else safe) before any request is sent out.
 #[derive(Default, Debug)]
 pub struct PersistentState<DataType> {
@@ -69,9 +63,34 @@ pub struct PersistentState<DataType> {
     log: Vec<LogEntry<DataType>>,
 }
 
-impl<DataType> PersistentState<DataType> {
+impl<DataType> PersistentState<DataType>
+where
+    DataType: Copy + Clone + Debug,
+{
     pub fn volitile_start_state(&self) -> VolitileState {
         VolitileState::default()
+    }
+
+    pub fn log_length(&self) -> usize {
+        self.log.len()
+    }
+
+    pub fn prev_term(&self, index: usize) -> u32 {
+        match index {
+            0 => 0,
+            _ => self.log[index - 1].term,
+        }
+    }
+
+    pub fn term(&self) -> u32 {
+        self.current_term
+    }
+
+    pub fn entry(&self, index: usize) -> Option<LogEntry<DataType>> {
+        match index == self.log.len() {
+            true => None,
+            false => Some(self.log[index]),
+        }
     }
 }
 
@@ -98,18 +117,32 @@ impl<DataType> Default for ServerState<DataType> {
     }
 }
 
-pub struct RaftServer<DataType> {
+pub struct RaftServer<DataType>
+where
+    DataType: Copy + Clone + Debug,
+{
     pub state: Arc<Mutex<ServerState<DataType>>>,
-    pub socket: Arc<Mutex<RaftSocket>>,
-    pub channel: Arc<Mutex<RaftChannel>>,
+    pub socket: Arc<Mutex<RaftSocket<DataType>>>,
+    pub channel: Arc<Mutex<RaftChannel<DataType>>>,
 }
 
-pub enum RaftResponse {
-    Target { id: u32, response: RaftRequest },
-    Broadcast { response: RaftRequest },
+pub enum RaftResponse<DataType>
+where
+    DataType: Copy + Clone + Debug,
+{
+    Target {
+        id: u32,
+        response: RaftRequest<DataType>,
+    },
+    Broadcast {
+        response: RaftRequest<DataType>,
+    },
 }
 
-impl<DataType: Debug + Send + Sync + 'static> RaftServer<DataType> {
+impl<DataType: Debug + Send + Sync + 'static> RaftServer<DataType>
+where
+    DataType: Copy + Clone + Debug,
+{
     pub fn new(id: u32) -> Self {
         Self {
             state: Arc::new(Mutex::new(ServerState::default())),
@@ -119,7 +152,7 @@ impl<DataType: Debug + Send + Sync + 'static> RaftServer<DataType> {
     }
     pub async fn heartbeat(
         state: Arc<Mutex<ServerState<DataType>>>,
-        channel: Arc<Mutex<RaftChannel>>,
+        channel: Arc<Mutex<RaftChannel<DataType>>>,
     ) {
         loop {
             let rand_sleep =
@@ -183,8 +216,8 @@ impl<DataType: Debug + Send + Sync + 'static> RaftServer<DataType> {
 
     pub async fn handle(
         state: Arc<Mutex<ServerState<DataType>>>,
-        channel: Arc<Mutex<RaftChannel>>,
-        socket: Arc<Mutex<RaftSocket>>,
+        channel: Arc<Mutex<RaftChannel<DataType>>>,
+        socket: Arc<Mutex<RaftSocket<DataType>>>,
     ) {
         loop {
             let request;
@@ -215,24 +248,23 @@ impl<DataType: Debug + Send + Sync + 'static> RaftServer<DataType> {
 
     pub async fn leader_heartbeat(
         state: Arc<Mutex<ServerState<DataType>>>,
-        channel: Arc<Mutex<RaftChannel>>,
+        channel: Arc<Mutex<RaftChannel<DataType>>>,
     ) {
         loop {
             task::sleep(201 * HEARTBEAT_LENGTH / 3210).await;
             {
                 let mut state = state.lock().await;
                 match &state.state {
-                    RaftState::Leader {
-                        leader_volitile,
-                        volitile,
-                    } => {
+                    RaftState::Leader { volitile, .. } => {
+                        let request = RequestType::heartbeat(&state.persistent_state, volitile);
                         state.last_heartbeat = SystemTime::now();
+
                         let channel = channel.lock().await;
                         channel
                             .broadcast(RaftRequest {
                                 term: state.persistent_state.current_term,
                                 sender: 0,
-                                request: RequestType::Append {},
+                                request,
                             })
                             .await
                             .unwrap();
@@ -272,13 +304,16 @@ impl<DataType: Debug + Send + Sync + 'static> RaftServer<DataType> {
     }
 }
 
-impl<DataType> ServerState<DataType> {
+impl<DataType> ServerState<DataType>
+where
+    DataType: Copy + Clone + Debug,
+{
     pub fn handle(
         &mut self,
-        request: RaftRequest,
+        request: RaftRequest<DataType>,
         servers: Vec<u32>,
         time: SystemTime,
-    ) -> Option<RaftResponse> {
+    ) -> Option<RaftResponse<DataType>> {
         if request.term > self.persistent_state.current_term {
             self.state = RaftState::Follower {
                 volitile: self.persistent_state.volitile_start_state(),
@@ -291,7 +326,12 @@ impl<DataType> ServerState<DataType> {
         match &mut self.state {
             RaftState::Follower { volitile } => {
                 match request.request {
-                    RequestType::Append {} => {
+                    RequestType::Append {
+                        prev_length,
+                        prev_term,
+                        commit_index,
+                        entry,
+                    } => {
                         // If the term is behind, we have a leader from the last round.
                         let success = request.term >= self.persistent_state.current_term;
 
@@ -357,19 +397,22 @@ impl<DataType> ServerState<DataType> {
                         }
                         if votes.len() > (servers.len() + 1) / 2 {
                             self.persistent_state.current_term += 1;
-                            let volitile = self.persistent_state.volitile_start_state();
-                            self.state = RaftState::Leader {
-                                leader_volitile: volitile.leader_start_state(servers),
-                                volitile,
-                            };
                             self.last_heartbeat = SystemTime::now();
-                            return Some(RaftResponse::Broadcast {
+                            let response = Some(RaftResponse::Broadcast {
                                 response: RaftRequest {
                                     term: self.persistent_state.current_term,
                                     sender: 0,
-                                    request: RequestType::Append {},
+                                    request: RequestType::heartbeat(
+                                        &self.persistent_state,
+                                        &volitile,
+                                    ),
                                 },
                             });
+                            self.state = RaftState::Leader {
+                                leader_volitile: volitile.leader_start_state(servers),
+                                volitile: *volitile,
+                            };
+                            return response;
                         } else {
                             return None;
                         }

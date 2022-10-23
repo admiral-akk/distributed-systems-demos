@@ -5,15 +5,22 @@ use async_std::{
     task,
 };
 use rand::Rng;
+use std::fmt::Debug;
 
 use crate::{raft_request::RaftRequest, raft_socket::RaftSocket};
 
-pub struct RaftChannel {
+pub struct RaftChannel<DataType>
+where
+    DataType: Copy + Clone + Debug,
+{
     pub id: u32,
-    senders: HashMap<u32, Sender<RaftRequest>>,
+    senders: HashMap<u32, Sender<RaftRequest<DataType>>>,
 }
 
-impl RaftChannel {
+impl<DataType> RaftChannel<DataType>
+where
+    DataType: Copy + Clone + Debug,
+{
     pub fn new(id: u32) -> Self {
         Self {
             id,
@@ -21,15 +28,15 @@ impl RaftChannel {
         }
     }
 
-    pub fn register_socket(&mut self, other: &mut RaftSocket) {
+    pub fn register_socket(&mut self, other: &mut RaftSocket<DataType>) {
         self.senders.insert(other.id, other.sender.clone());
     }
 
     pub async fn send(
         &self,
         target_id: u32,
-        mut message: RaftRequest,
-    ) -> Result<(), SendError<RaftRequest>> {
+        mut message: RaftRequest<DataType>,
+    ) -> Result<(), SendError<RaftRequest<DataType>>> {
         message.sender = self.id;
         self.random_delay().await;
         if let Some(sender) = self.senders.get(&target_id) {
@@ -43,7 +50,10 @@ impl RaftChannel {
         task::sleep(Duration::from_millis(rand_len)).await;
     }
 
-    pub async fn broadcast(&self, mut message: RaftRequest) -> Result<(), SendError<RaftRequest>> {
+    pub async fn broadcast(
+        &self,
+        mut message: RaftRequest<DataType>,
+    ) -> Result<(), SendError<RaftRequest<DataType>>> {
         message.sender = self.id;
         self.random_delay().await;
         println!("Broadcasting:\n{:?}", message);
