@@ -18,11 +18,22 @@ use crate::{
 pub enum RaftState {
     #[default]
     Offline,
-    Follower {},
+    Follower {
+        volitile: VolitileState,
+    },
     Candidate {
+        volitile: VolitileState,
         votes: HashSet<u32>,
     },
-    Leader,
+    Leader {
+        volitile: VolitileState,
+    },
+}
+
+#[derive(PartialEq, Default, Debug)]
+pub struct VolitileState {
+    pub commit_index: usize,
+    pub last_applied: usize,
 }
 
 #[derive(Default, Debug)]
@@ -37,6 +48,12 @@ pub struct PersistentState<DataType> {
     current_term: u32,
     voted_for: Option<u32>,
     log: Vec<LogEntry<DataType>>,
+}
+
+impl<DataType> PersistentState<DataType> {
+    pub fn volitile_start_state(&self) -> VolitileState {
+        VolitileState::default()
+    }
 }
 
 const HEARTBEAT_LENGTH: Duration = Duration::from_millis(2000);
@@ -102,6 +119,7 @@ impl<DataType: Debug + Send + 'static> RaftServer<DataType> {
                 let channel = channel.lock().await;
                 state.state = RaftState::Candidate {
                     votes: HashSet::from([channel.id]),
+                    volitile: state.persistent_state.volitile_start_state(),
                 };
                 state.persistent_state.voted_for = Some(channel.id);
                 state.persistent_state.current_term += 1;
@@ -131,7 +149,9 @@ impl<DataType: Debug + Send + 'static> RaftServer<DataType> {
             task::sleep(rand_sleep).await;
             {
                 let mut state = state.lock().await;
-                state.state = RaftState::Follower {};
+                state.state = RaftState::Follower {
+                    volitile: state.persistent_state.volitile_start_state(),
+                };
             }
         }
     }
@@ -176,17 +196,20 @@ impl<DataType: Debug + Send + 'static> RaftServer<DataType> {
             task::sleep(201 * HEARTBEAT_LENGTH / 3210).await;
             {
                 let mut state = state.lock().await;
-                if state.state == RaftState::Leader {
-                    state.last_heartbeat = SystemTime::now();
-                    let channel = channel.lock().await;
-                    channel
-                        .broadcast(RaftRequest {
-                            term: state.persistent_state.current_term,
-                            sender: 0,
-                            request: RequestType::Append {},
-                        })
-                        .await
-                        .unwrap();
+                match &state.state {
+                    RaftState::Leader { volitile } => {
+                        state.last_heartbeat = SystemTime::now();
+                        let channel = channel.lock().await;
+                        channel
+                            .broadcast(RaftRequest {
+                                term: state.persistent_state.current_term,
+                                sender: 0,
+                                request: RequestType::Append {},
+                            })
+                            .await
+                            .unwrap();
+                    }
+                    _ => {}
                 }
             }
         }
@@ -197,7 +220,9 @@ impl<DataType: Debug + Send + 'static> RaftServer<DataType> {
             self.state
                 .lock()
                 .then(|mut f| async move {
-                    f.state = RaftState::Follower {};
+                    f.state = RaftState::Follower {
+                        volitile: f.persistent_state.volitile_start_state(),
+                    };
                 })
                 .await;
         }
@@ -227,14 +252,16 @@ impl<DataType> ServerState<DataType> {
         time: SystemTime,
     ) -> Option<RaftResponse> {
         if request.term > self.persistent_state.current_term {
-            self.state = RaftState::Follower {};
+            self.state = RaftState::Follower {
+                volitile: self.persistent_state.volitile_start_state(),
+            };
             self.last_heartbeat = SystemTime::now();
             self.persistent_state.voted_for = None;
             self.persistent_state.current_term = request.term;
         }
 
         match &mut self.state {
-            RaftState::Follower {} => {
+            RaftState::Follower { volitile } => {
                 match request.request {
                     RequestType::Append {} => {
                         // If the term is behind, we have a leader from the last round.
@@ -280,7 +307,7 @@ impl<DataType> ServerState<DataType> {
                 }
             }
             // Candidates only care about getting votes. If they get a majority, they transform into leaders.
-            RaftState::Candidate { votes } => {
+            RaftState::Candidate { volitile, votes } => {
                 match request.request {
                     RequestType::VoteResponse { vote } => {
                         if vote {
@@ -289,7 +316,9 @@ impl<DataType> ServerState<DataType> {
                         }
                         if votes.len() > server_count / 2 {
                             self.persistent_state.current_term += 1;
-                            self.state = RaftState::Leader;
+                            self.state = RaftState::Leader {
+                                volitile: self.persistent_state.volitile_start_state(),
+                            };
                             self.last_heartbeat = SystemTime::now();
                             return Some(RaftResponse::Broadcast {
                                 response: RaftRequest {
@@ -307,11 +336,13 @@ impl<DataType> ServerState<DataType> {
                 }
             }
             // Leaders just care that their commands are sucessful. If they ever fail, they get sad and quit their job.
-            RaftState::Leader => {
+            RaftState::Leader { volitile } => {
                 match request.request {
                     RequestType::AppendResponse { success } => {
                         if !success {
-                            self.state = RaftState::Follower {};
+                            self.state = RaftState::Follower {
+                                volitile: self.persistent_state.volitile_start_state(),
+                            };
                             self.last_heartbeat = SystemTime::now();
                             self.persistent_state.voted_for = None;
                         }
