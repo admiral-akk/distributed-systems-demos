@@ -109,7 +109,7 @@ pub enum RaftResponse {
     Broadcast { response: RaftRequest },
 }
 
-impl<DataType: Debug + Send + 'static> RaftServer<DataType> {
+impl<DataType: Debug + Send + Sync + 'static> RaftServer<DataType> {
     pub fn new(id: u32) -> Self {
         Self {
             state: Arc::new(Mutex::new(ServerState::default())),
@@ -146,7 +146,13 @@ impl<DataType: Debug + Send + 'static> RaftServer<DataType> {
                     .broadcast(RaftRequest {
                         term: state.persistent_state.current_term,
                         sender: 0,
-                        request: RequestType::Vote {},
+                        request: RequestType::Vote {
+                            log_length: state.persistent_state.log.len(),
+                            log_term: match state.persistent_state.log.last() {
+                                Some(entry) => entry.term,
+                                None => 0,
+                            },
+                        },
                     })
                     .await
                     .unwrap();
@@ -303,9 +309,22 @@ impl<DataType> ServerState<DataType> {
                             },
                         });
                     }
-                    RequestType::Vote {} => {
+                    RequestType::Vote {
+                        log_length,
+                        log_term,
+                    } => {
                         // If the request is from a previous term, then we vote no.
                         let mut vote = request.term >= self.persistent_state.current_term;
+
+                        // If we've committed any values, then we can ask these questions.
+                        if !self.persistent_state.log.is_empty() {
+                            // If the candidate's log ends with an older term, then we reject them.
+                            vote &= self.persistent_state.log.last().unwrap().term <= log_term;
+                            if self.persistent_state.log.last().unwrap().term == log_term {
+                                // If the candidate's log is shorter and in the same term, then reject them.
+                                vote &= self.persistent_state.log.len() <= log_length;
+                            }
+                        }
 
                         // If we've already voted, and the requester is a different person, then vote no.
                         if let Some(previous_vote) = self.persistent_state.voted_for {

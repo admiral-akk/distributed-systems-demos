@@ -9,6 +9,6 @@ pub struct RaftRequest {
 pub enum RequestType {
     Append {},
     AppendResponse { success: bool },
-    Vote {},
+    Vote { log_length: usize, log_term: u32 },
     VoteResponse { vote: bool },
 }
