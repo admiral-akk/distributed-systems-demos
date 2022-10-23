@@ -452,7 +452,7 @@ where
             }
             RaftState::Leader {
                 leader_volitile,
-                volitile,
+                volitile: _,
             } => {
                 match request.request {
                     RequestType::AppendResponse { success } => {

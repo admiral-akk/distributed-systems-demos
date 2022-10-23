@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use crate::raft_server::{PersistentState, VolitileLeaderState, VolitileState};
+use crate::raft_server::{PersistentState, VolitileState};
 
 #[derive(Copy, Clone, Debug)]
 pub struct RaftRequest<DataType>
