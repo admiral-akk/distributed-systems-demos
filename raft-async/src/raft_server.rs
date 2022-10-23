@@ -140,7 +140,7 @@ where
 
 impl<DataType: Debug + Send + Sync + 'static> RaftServer<DataType>
 where
-    DataType: Copy + Clone + Debug,
+    DataType: Copy + Clone + Debug + Default,
 {
     pub fn new(id: u32) -> Self {
         Self {
@@ -149,7 +149,7 @@ where
             output: Arc::new(Mutex::new(RaftChannel::new(id))),
         }
     }
-    pub async fn heartbeat(
+    pub async fn heartbeat_timeout(
         state: Arc<Mutex<ServerState<DataType>>>,
         output: Arc<Mutex<RaftChannel<DataType>>>,
     ) {
@@ -174,28 +174,45 @@ where
                 };
                 state.persistent_state.voted_for = Some(channel.id);
                 state.persistent_state.current_term += 1;
-                channel
-                    .broadcast(RaftRequest {
-                        term: state.persistent_state.current_term,
-                        sender: 0,
-                        request: RequestType::Vote {
-                            log_length: state.persistent_state.log.len(),
-                            log_term: match state.persistent_state.log.last() {
-                                Some(entry) => entry.term,
-                                None => 0,
-                            },
+                channel.broadcast(RaftRequest {
+                    term: state.persistent_state.current_term,
+                    sender: 0,
+                    request: RequestType::Vote {
+                        log_length: state.persistent_state.log.len(),
+                        log_term: match state.persistent_state.log.last() {
+                            Some(entry) => entry.term,
+                            None => 0,
                         },
-                    })
-                    .await
-                    .unwrap();
+                    },
+                });
             }
         }
     }
 
-    pub async fn kill_leader(state: Arc<Mutex<ServerState<DataType>>>) {
+    pub async fn random_append(state: Arc<Mutex<ServerState<DataType>>>) {
+        loop {
+            let rand_sleep = rand::thread_rng().gen_range((HEARTBEAT_LENGTH / 4)..HEARTBEAT_LENGTH);
+            task::sleep(rand_sleep).await;
+            {
+                let mut state = state.lock().await;
+                match &state.state {
+                    RaftState::Leader { .. } => {
+                        let term = state.persistent_state.term();
+                        state.persistent_state.log.push(LogEntry {
+                            data: DataType::default(),
+                            term,
+                        });
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    pub async fn random_death(state: Arc<Mutex<ServerState<DataType>>>) {
         loop {
             let rand_sleep =
-                rand::thread_rng().gen_range((3 * HEARTBEAT_LENGTH)..(5 * HEARTBEAT_LENGTH));
+                rand::thread_rng().gen_range((5 * HEARTBEAT_LENGTH)..(7 * HEARTBEAT_LENGTH));
             task::sleep(rand_sleep).await;
             {
                 let mut state = state.lock().await;
@@ -234,10 +251,10 @@ where
                 if let Some(response) = response {
                     match response {
                         RaftResponse::Target { id, response } => {
-                            channel.send(id, response).await;
+                            channel.send(id, response);
                         }
                         RaftResponse::Broadcast { response } => {
-                            channel.broadcast(response).await;
+                            channel.broadcast(response);
                         }
                     };
                 }
@@ -254,19 +271,28 @@ where
             {
                 let mut state = state.lock().await;
                 match &state.state {
-                    RaftState::Leader { volitile, .. } => {
-                        let request = RequestType::heartbeat(&state.persistent_state, volitile);
+                    RaftState::Leader {
+                        volitile,
+                        leader_volitile,
+                    } => {
+                        let output = output.lock().await;
+                        let servers = output.servers();
+                        for server in servers {
+                            let request = RequestType::append(
+                                &state.persistent_state,
+                                leader_volitile.next_index[&server],
+                                volitile,
+                            );
+                            output.send(
+                                server,
+                                RaftRequest {
+                                    term: state.persistent_state.current_term,
+                                    sender: 0,
+                                    request,
+                                },
+                            );
+                        }
                         state.last_heartbeat = SystemTime::now();
-
-                        let channel = output.lock().await;
-                        channel
-                            .broadcast(RaftRequest {
-                                term: state.persistent_state.current_term,
-                                sender: 0,
-                                request,
-                            })
-                            .await
-                            .unwrap();
                     }
                     _ => {}
                 }
@@ -285,7 +311,7 @@ where
                 })
                 .await;
         }
-        task::spawn(RaftServer::heartbeat(
+        task::spawn(RaftServer::heartbeat_timeout(
             self.state.clone(),
             self.output.clone(),
         ));
@@ -293,7 +319,8 @@ where
             self.state.clone(),
             self.output.clone(),
         ));
-        task::spawn(RaftServer::kill_leader(self.state.clone()));
+        task::spawn(RaftServer::random_append(self.state.clone()));
+        task::spawn(RaftServer::random_death(self.state.clone()));
         task::spawn(RaftServer::handle(
             self.state.clone(),
             self.input.clone(),
@@ -334,12 +361,10 @@ where
                     } => {
                         // If the term is behind, we have a leader from the last round.
                         let mut success = request.term >= self.persistent_state.current_term;
-                        if prev_length > 0 {
-                            if let Some(entry) = self.persistent_state.entry(prev_length - 1) {
-                                success &= entry.term == prev_term;
-                            }
+                        success &= prev_length >= self.persistent_state.log.len();
+                        if success {
+                            success &= prev_term == self.persistent_state.prev_term(prev_length);
                         }
-
                         if success {
                             // Update the current leader.
                             self.persistent_state.voted_for = Some(request.sender);

@@ -34,11 +34,7 @@ where
             .insert(other.id, Arc::new(other.sender.clone()));
     }
 
-    pub async fn send(
-        &self,
-        target_id: u32,
-        mut message: RaftRequest<DataType>,
-    ) -> Result<(), SendError<RaftRequest<DataType>>> {
+    pub fn send(&self, target_id: u32, mut message: RaftRequest<DataType>) {
         message.sender = self.id;
         println!("Sending:\n{:?}", message);
         if let Some(sender) = self.senders.get(&target_id) {
@@ -49,18 +45,9 @@ where
                 sender.send(message).await;
             });
         }
-        Ok(())
     }
 
-    async fn random_delay(&self) {
-        let rand_len = rand::thread_rng().gen_range(50..1000);
-        task::sleep(Duration::from_millis(rand_len)).await;
-    }
-
-    pub async fn broadcast(
-        &self,
-        mut message: RaftRequest<DataType>,
-    ) -> Result<(), SendError<RaftRequest<DataType>>> {
+    pub fn broadcast(&self, mut message: RaftRequest<DataType>) {
         message.sender = self.id;
         println!("Broadcasting:\n{:?}", message);
         for (_, sender) in &self.senders {
@@ -72,7 +59,6 @@ where
                 sender.send(message).await;
             });
         }
-        Ok(())
     }
 
     pub fn servers(&self) -> Vec<u32> {
