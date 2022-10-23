@@ -39,7 +39,7 @@ impl RaftChannel {
         Ok(())
     }
     async fn random_delay(&self) {
-        let rand_len = rand::thread_rng().gen_range(50..100);
+        let rand_len = rand::thread_rng().gen_range(50..1000);
         task::sleep(Duration::from_millis(rand_len)).await;
     }
 

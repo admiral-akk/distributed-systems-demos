@@ -1,9 +1,11 @@
 use std::{
     collections::HashSet,
+    fmt::Debug,
     time::{Duration, SystemTime},
 };
 
 use async_std::{sync::Arc, sync::Mutex, task};
+use futures::FutureExt;
 use rand::Rng;
 
 use crate::{
@@ -25,32 +27,37 @@ pub enum RaftState {
 
 // This state is written to disc (or somewhere else safe) before any request is sent out.
 #[derive(Default, Debug)]
-pub struct PersistentState {
+pub struct PersistentState<DataType> {
     current_term: u32,
     voted_for: Option<u32>,
+    log: Vec<DataType>,
 }
 
 const HEARTBEAT_LENGTH: Duration = Duration::from_millis(2000);
 
 #[derive(Debug)]
-pub struct ServerState {
+pub struct ServerState<DataType> {
     state: RaftState,
     last_heartbeat: SystemTime,
-    persistent_state: PersistentState,
+    persistent_state: PersistentState<DataType>,
 }
 
-impl Default for ServerState {
+impl<DataType> Default for ServerState<DataType> {
     fn default() -> Self {
         Self {
             state: Default::default(),
             last_heartbeat: SystemTime::now(),
-            persistent_state: Default::default(),
+            persistent_state: PersistentState {
+                current_term: 0,
+                voted_for: None,
+                log: Vec::new(),
+            },
         }
     }
 }
 
-pub struct RaftServer {
-    pub state: Arc<Mutex<ServerState>>,
+pub struct RaftServer<DataType> {
+    pub state: Arc<Mutex<ServerState<DataType>>>,
     pub socket: Arc<Mutex<RaftSocket>>,
     pub channel: Arc<Mutex<RaftChannel>>,
 }
@@ -60,7 +67,7 @@ pub enum RaftResponse {
     Broadcast { response: RaftRequest },
 }
 
-impl RaftServer {
+impl<DataType: Debug + Send + 'static> RaftServer<DataType> {
     pub fn new(id: u32) -> Self {
         Self {
             state: Arc::new(Mutex::new(ServerState::default())),
@@ -68,7 +75,10 @@ impl RaftServer {
             channel: Arc::new(Mutex::new(RaftChannel::new(id))),
         }
     }
-    pub async fn heartbeat(state: Arc<Mutex<ServerState>>, channel: Arc<Mutex<RaftChannel>>) {
+    pub async fn heartbeat(
+        state: Arc<Mutex<ServerState<DataType>>>,
+        channel: Arc<Mutex<RaftChannel>>,
+    ) {
         loop {
             let rand_sleep =
                 rand::thread_rng().gen_range((HEARTBEAT_LENGTH / 2)..(2 * HEARTBEAT_LENGTH));
@@ -101,7 +111,7 @@ impl RaftServer {
         }
     }
 
-    pub async fn kill_leader(state: Arc<Mutex<ServerState>>) {
+    pub async fn kill_leader(state: Arc<Mutex<ServerState<DataType>>>) {
         loop {
             let rand_sleep =
                 rand::thread_rng().gen_range((3 * HEARTBEAT_LENGTH)..(5 * HEARTBEAT_LENGTH));
@@ -121,7 +131,7 @@ impl RaftServer {
     }
 
     pub async fn handle(
-        state: Arc<Mutex<ServerState>>,
+        state: Arc<Mutex<ServerState<DataType>>>,
         channel: Arc<Mutex<RaftChannel>>,
         socket: Arc<Mutex<RaftSocket>>,
     ) {
@@ -140,17 +150,20 @@ impl RaftServer {
                 let response = state.handle(request, channel.server_count(), SystemTime::now());
                 if let Some(response) = response {
                     match response {
-                        RaftResponse::Target { id, response } => channel.send(id, response).await,
-                        RaftResponse::Broadcast { response } => channel.broadcast(response).await,
-                    }
-                    .unwrap();
+                        RaftResponse::Target { id, response } => {
+                            channel.send(id, response).await;
+                        }
+                        RaftResponse::Broadcast { response } => {
+                            channel.broadcast(response).await;
+                        }
+                    };
                 }
             }
         }
     }
 
     pub async fn leader_heartbeat(
-        state: Arc<Mutex<ServerState>>,
+        state: Arc<Mutex<ServerState<DataType>>>,
         channel: Arc<Mutex<RaftChannel>>,
     ) {
         loop {
@@ -175,8 +188,12 @@ impl RaftServer {
 
     pub async fn start(&mut self) {
         {
-            let mut state = self.state.lock().await;
-            state.state = RaftState::Follower {};
+            self.state
+                .lock()
+                .then(|mut f| async move {
+                    f.state = RaftState::Follower {};
+                })
+                .await;
         }
         task::spawn(RaftServer::heartbeat(
             self.state.clone(),
@@ -196,7 +213,7 @@ impl RaftServer {
     }
 }
 
-impl ServerState {
+impl<DataType> ServerState<DataType> {
     pub fn handle(
         &mut self,
         request: RaftRequest,

@@ -7,7 +7,9 @@ mod raft_server;
 mod raft_socket;
 
 fn main() {
-    let servers = (0..5).map(|i| RaftServer::new(i)).collect::<Vec<_>>();
+    let servers = (0..5)
+        .map(|i| RaftServer::<u32>::new(i))
+        .collect::<Vec<_>>();
     for i in 0..5 {
         for j in 0..5 {
             if i == j {
