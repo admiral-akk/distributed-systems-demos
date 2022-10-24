@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::data::{entry::Entry, request::Request};
 
 use super::{candidate::Candidate, follower::Follower, leader::Leader, offline::Offline};
@@ -51,10 +53,22 @@ impl<DataType> RaftStateWrapper<DataType> {
     }
 }
 
+pub struct Config {
+    pub servers: HashSet<u32>,
+}
+
+impl Config {
+    pub fn quorum(&self) -> usize {
+        self.servers.len() / 2 + 1
+    }
+}
+
 pub struct PersistentState<DataType> {
+    pub id: u32,
     pub current_term: u32,
     pub voted_for: Option<u32>,
     pub log: Vec<Entry<DataType>>,
+    pub config: Config,
 }
 
 #[derive(Default)]
