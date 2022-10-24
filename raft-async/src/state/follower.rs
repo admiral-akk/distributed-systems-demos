@@ -68,6 +68,40 @@ impl<T: DataType> Handler<T> for RaftStateGeneric<Follower> {
                 let mut success = true;
                 success &= persistent_state.current_term <= term;
                 persistent_state.last_heartbeat = Some(SystemTime::now());
+                // If we don't have the previous entry, then the append fails.
+                success &= persistent_state.log.len() >= prev_log_length;
+                if success && prev_log_length > 0 {
+                    // If we have a previous entry, then the term needs to match.
+                    success &= persistent_state.log[prev_log_length - 1].term == prev_log_term;
+                }
+
+                if success {
+                    for (index, &entry) in entries.iter().enumerate() {
+                        let log_index = prev_log_length + index;
+                        if persistent_state.log.len() > log_index {
+                            if persistent_state.log[log_index].term != entry.term {
+                                persistent_state
+                                    .log
+                                    .drain(log_index..persistent_state.log.len());
+                            }
+                        }
+                        if persistent_state.log.len() > log_index {
+                            persistent_state.log[log_index] = entry;
+                        } else {
+                            persistent_state.log.push(entry);
+                        }
+                    }
+                }
+
+                if leader_commit > volitile_state.commit_index {
+                    if success {
+                        volitile_state.commit_index =
+                            leader_commit.min(prev_log_length + entries.len());
+                    } else {
+                        volitile_state.commit_index = leader_commit;
+                    }
+                }
+
                 (
                     Vec::from([Request {
                         sender: persistent_state.id,

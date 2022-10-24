@@ -34,7 +34,7 @@ impl<T: DataType> Switch<T> {
         loop {
             let request = switch.reciever.recv().await;
             if let Ok(request) = request {
-                if rand::thread_rng().gen_range(0..100) > 70 {
+                if rand::thread_rng().gen_range(0..100) > 95 {
                     continue;
                 }
                 let socket = {

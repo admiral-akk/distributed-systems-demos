@@ -49,6 +49,20 @@ impl<T: DataType> Handler<T> for RaftStateGeneric<Candidate> {
             );
         }
         match request.data {
+            RequestType::Append { .. } => {
+                if request.term >= persistent_state.current_term {
+                    return (
+                        Vec::default(),
+                        Some(
+                            RaftStateGeneric::<Follower> {
+                                state: Default::default(),
+                            }
+                            .into(),
+                        ),
+                    );
+                }
+                (Vec::default(), None)
+            }
             RequestType::VoteResponse { success } => {
                 if success {
                     println!("{} voted for {}", request.sender, persistent_state.id);

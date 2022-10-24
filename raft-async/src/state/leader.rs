@@ -4,18 +4,18 @@ use crate::data::{
     data_type::DataType,
     persistent_state::PersistentState,
     request::{Request, RequestType},
-    volitile_state::{self, VolitileState},
+    volitile_state::VolitileState,
 };
 
 use super::{
-    candidate::{self, Candidate},
+    candidate::Candidate,
     follower::Follower,
     raft_state::{Handler, RaftStateGeneric, RaftStateWrapper},
 };
 
 pub struct Leader {
     pub next_index: HashMap<u32, usize>,
-    pub commit_index: HashMap<u32, usize>,
+    pub match_index: HashMap<u32, usize>,
 }
 
 impl Leader {}
@@ -26,25 +26,43 @@ impl RaftStateGeneric<Leader> {
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
     ) -> Vec<Request<T>> {
-        Self::heartbeat(persistent_state)
-    }
-
-    fn heartbeat<T: DataType>(persistent_state: &mut PersistentState<T>) -> Vec<Request<T>> {
         persistent_state
             .other_servers()
             .iter()
-            .map(|id| Request {
-                sender: persistent_state.id,
-                reciever: *id,
-                term: persistent_state.current_term,
-                data: RequestType::Append {
-                    prev_log_length: 0,
-                    prev_log_term: 0,
-                    entries: Vec::new(),
-                    leader_commit: 0,
-                },
-            })
+            .map(|server| self.append_update(volitile_state, persistent_state, *server))
             .collect()
+    }
+
+    fn append_update<T: DataType>(
+        &self,
+        volitile_state: &mut VolitileState,
+        persistent_state: &mut PersistentState<T>,
+        server: u32,
+    ) -> Request<T> {
+        let next_index = self.state.match_index[&server];
+        // Append at most 10 elements
+        let entries = match persistent_state.log.is_empty() {
+            false => Vec::from(
+                &persistent_state.log
+                    [(next_index - 1)..(next_index).min(persistent_state.log.len())],
+            ),
+            true => Vec::new(),
+        };
+        let data = RequestType::Append {
+            prev_log_length: next_index,
+            prev_log_term: match next_index > 0 {
+                true => persistent_state.log[next_index - 1].term,
+                false => 0,
+            },
+            entries,
+            leader_commit: volitile_state.commit_index,
+        };
+        Request {
+            sender: persistent_state.id,
+            reciever: server,
+            term: persistent_state.current_term,
+            data,
+        }
     }
 
     pub fn from_candidate<T: DataType>(
@@ -60,14 +78,15 @@ impl RaftStateGeneric<Leader> {
                 .iter()
                 .map(|id| (*id, persistent_state.log.len()))
                 .collect(),
-            commit_index: persistent_state
+            match_index: persistent_state
                 .other_servers()
                 .iter()
                 .map(|id| (*id, 0))
                 .collect(),
         };
         let wrapper = RaftStateGeneric { state: leader };
-        (Self::heartbeat(persistent_state), Some(wrapper.into()))
+        let heartbeat = wrapper.send_heartbeat(volitile_state, persistent_state);
+        (heartbeat, Some(wrapper.into()))
     }
 }
 
@@ -92,6 +111,28 @@ impl<T: DataType> Handler<T> for RaftStateGeneric<Leader> {
                     .into(),
                 ),
             );
+        }
+        match request.data {
+            RequestType::AppendResponse { success } => {
+                let next_index = self.state.next_index[&request.sender];
+                if success {
+                    self.state.match_index.insert(request.sender, next_index);
+                    self.state.next_index.insert(request.sender, next_index + 1);
+                } else if next_index > 0 {
+                    self.state.next_index.insert(request.sender, next_index - 1);
+                }
+                let matching_servers = self
+                    .state
+                    .match_index
+                    .iter()
+                    .filter(|(_, v)| **v >= next_index)
+                    .count();
+
+                if matching_servers + 1 > persistent_state.quorum() {
+                    volitile_state.commit_index = next_index.max(volitile_state.commit_index);
+                }
+            }
+            _ => {}
         }
         (Vec::default(), None)
     }
