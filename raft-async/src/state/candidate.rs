@@ -1,4 +1,4 @@
-use std::{collections::HashSet, hash::Hash};
+use std::collections::HashSet;
 
 use super::{
     follower::Follower,
@@ -7,6 +7,7 @@ use super::{
 };
 use crate::data::{
     data_type::DataType,
+    persistent_state::PersistentState,
     request::{Request, RequestType},
 };
 
@@ -15,38 +16,23 @@ pub struct Candidate {
     votes: HashSet<u32>,
 }
 
-impl<T: DataType> RaftStateGeneric<T, Candidate> {
-    pub fn handle(mut self, request: Request<T>) -> (Vec<Request<T>>, RaftStateWrapper<T>) {
-        let (sender, term) = (request.sender, request.term);
-        if term < self.persistent_state.current_term {
-            self.persistent_state.current_term = term;
-            self.persistent_state.voted_for = None;
-            let follower = RaftStateGeneric::<T, Follower>::from(self);
-            return follower.handle(request);
-        }
+impl RaftStateGeneric<Candidate> {
+    pub fn handle<T: DataType>(
+        &mut self,
+        request: Request<T>,
+        persistent_state: &mut PersistentState<T>,
+    ) -> (Vec<Request<T>>, Option<RaftStateWrapper>) {
         match request.data {
             RequestType::VoteResponse { success } => {
                 if success {
-                    self.state.votes.insert(sender);
+                    self.state.votes.insert(request.sender);
                 }
-                if self.state.votes.len() > self.persistent_state.quorum() {
-                    return RaftStateGeneric::<T, Leader>::from(self).heartbeat();
+                if self.state.votes.len() > persistent_state.quorum() {
+                    return RaftStateGeneric::from_candidate(&self, persistent_state);
                 }
-                (Vec::default(), self.into())
+                (Vec::default(), None)
             }
-            _ => (Vec::default(), self.into()),
-        }
-    }
-}
-
-impl<T: DataType> From<RaftStateGeneric<T, Follower>> for RaftStateGeneric<T, Candidate> {
-    fn from(follower: RaftStateGeneric<T, Follower>) -> Self {
-        RaftStateGeneric::<T, Candidate> {
-            state: Candidate {
-                votes: HashSet::from([follower.persistent_state.id]),
-            },
-            persistent_state: follower.persistent_state,
-            volitile_state: follower.volitile_state,
+            _ => (Vec::default(), None),
         }
     }
 }
