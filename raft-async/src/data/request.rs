@@ -27,4 +27,5 @@ pub enum RequestType<T: DataType> {
     VoteResponse {
         success: bool,
     },
+    Bootup {},
 }
