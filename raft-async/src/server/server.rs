@@ -53,6 +53,18 @@ where
     pub fn init(server: Arc<Server<T>>) {
         task::spawn(Server::request_loop(server.clone()));
         task::spawn(Server::timeout_loop(server.clone()));
+        task::spawn(Server::heartbeat_loop(server.clone()));
+    }
+
+    async fn heartbeat_loop(server: Arc<Server<T>>) {
+        loop {
+            let rng = rand::thread_rng().gen_range(100..TIMEOUT_MILLIS_CHECK);
+            task::sleep(Duration::from_millis(rng)).await;
+            let responses = server.state.lock().await.heartbeat();
+            for response in responses {
+                server.output.send(response).await;
+            }
+        }
     }
 
     async fn timeout_loop(server: Arc<Server<T>>) {

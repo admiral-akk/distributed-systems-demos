@@ -21,6 +21,14 @@ pub struct Leader {
 impl Leader {}
 
 impl RaftStateGeneric<Leader> {
+    pub fn send_heartbeat<T: DataType>(
+        &self,
+        volitile_state: &mut VolitileState,
+        persistent_state: &mut PersistentState<T>,
+    ) -> Vec<Request<T>> {
+        Self::heartbeat(persistent_state)
+    }
+
     fn heartbeat<T: DataType>(persistent_state: &mut PersistentState<T>) -> Vec<Request<T>> {
         persistent_state
             .other_servers()

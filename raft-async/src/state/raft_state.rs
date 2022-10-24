@@ -56,6 +56,15 @@ pub struct State<T: DataType> {
 }
 
 impl<T: DataType> State<T> {
+    pub fn heartbeat(&mut self) -> Vec<Request<T>> {
+        match &self.raft_state {
+            RaftStateWrapper::Leader(leader) => {
+                leader.send_heartbeat(&mut self.volitile_state, &mut self.persistent_state)
+            }
+            _ => (Vec::new()),
+        }
+    }
+
     pub fn check_timeout(&mut self) -> Vec<Request<T>> {
         let (responses, next) = self
             .raft_state
