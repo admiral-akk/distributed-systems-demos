@@ -7,11 +7,8 @@ use async_std::{
 };
 
 use crate::{
-    data::{
-        data_type::DataType,
-        request::{self, Request},
-    },
-    state::{offline::Offline, raft_state::State},
+    data::{data_type::DataType, request::Request},
+    state::raft_state::State,
 };
 
 use super::switch::Switch;
@@ -22,7 +19,7 @@ pub struct Server<T: DataType> {
     pub output: Sender<Request<T>>,
 }
 
-impl<T: DataType + 'static> Server<T>
+impl<T: DataType> Server<T>
 where
     State<T>: Default,
 {

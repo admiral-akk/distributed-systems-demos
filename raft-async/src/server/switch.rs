@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use async_std::{
     channel::{self, Receiver, Sender},
     sync::{Arc, Mutex},
+    task,
 };
 
 use crate::data::{data_type::DataType, request::Request};
@@ -24,13 +25,9 @@ impl<T: DataType> Switch<T> {
         }
     }
 
-    pub async fn handle(&self, requests: Vec<Request<T>>) {
-        let senders = self.senders.lock().await;
-        for request in requests {
-            senders[&request.reciever].send(request).await;
-        }
+    pub fn init(switch: Arc<Switch<T>>) {
+        task::spawn(Switch::request_loop(switch));
     }
-
     async fn request_loop(switch: Arc<Switch<T>>) {
         loop {
             let request = switch.reciever.recv().await;
@@ -38,6 +35,13 @@ impl<T: DataType> Switch<T> {
                 let senders = switch.senders.lock().await;
                 senders[&request.reciever].send(request).await;
             }
+        }
+    }
+
+    pub async fn handle(&self, requests: Vec<Request<T>>) {
+        let senders = self.senders.lock().await;
+        for request in requests {
+            senders[&request.reciever].send(request).await;
         }
     }
 

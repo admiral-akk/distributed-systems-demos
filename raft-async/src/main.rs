@@ -14,6 +14,7 @@ mod server;
 mod state;
 fn main() {
     let switch: Arc<Switch<u32>> = Arc::new(Switch::new());
+    Switch::init(switch.clone());
     let servers = (0..5)
         .map(|id| Server::new(id, switch.clone()))
         .map(|server| Arc::new(task::block_on(server)))
@@ -21,6 +22,7 @@ fn main() {
     for server in servers {
         Server::init(server);
     }
+
     task::block_on(task::spawn(async {
         loop {
             task::sleep(Duration::from_secs(100)).await
