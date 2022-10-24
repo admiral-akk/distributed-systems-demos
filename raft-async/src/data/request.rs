@@ -1,5 +1,6 @@
 use super::data_type::DataType;
 use super::entry::Entry;
+use super::persistent_state::{self, PersistentState};
 
 #[derive(Clone)]
 pub struct Request<T: DataType> {
@@ -27,5 +28,4 @@ pub enum RequestType<T: DataType> {
     VoteResponse {
         success: bool,
     },
-    Bootup {},
 }

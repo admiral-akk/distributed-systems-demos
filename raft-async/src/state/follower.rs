@@ -1,15 +1,14 @@
+use std::time::{self, SystemTime};
+
 use crate::data::{
     data_type::DataType,
     persistent_state::PersistentState,
     request::{Request, RequestType},
-    volitile_state::VolitileState,
 };
 
 use super::{
     candidate::Candidate,
-    leader::Leader,
-    offline::Offline,
-    raft_state::{RaftStateGeneric, RaftStateWrapper},
+    raft_state::{Handler, RaftStateGeneric, RaftStateWrapper},
 };
 
 #[derive(Default)]
@@ -24,12 +23,10 @@ impl Default for RaftStateGeneric<Follower> {
     }
 }
 
-impl RaftStateGeneric<Follower> {
-    pub fn vote<T: DataType>(mut self) -> (Vec<Request<T>>, RaftStateWrapper) {
-        (Vec::new(), self.into())
-    }
+const FOLLOWER_TIMEOUT: u128 = 2000;
 
-    pub fn handle<T: DataType>(
+impl<T: DataType> Handler<T> for RaftStateGeneric<Follower> {
+    fn handle(
         &mut self,
         request: Request<T>,
         persistent_state: &mut PersistentState<T>,
@@ -40,8 +37,9 @@ impl RaftStateGeneric<Follower> {
                 log_length: prev_log_index,
                 last_log_term: prev_log_term,
             } => {
+                println!("{} requested vote from {}", sender, persistent_state.id);
                 let mut success = true;
-                success &= persistent_state.current_term > term;
+                success &= persistent_state.current_term <= term;
                 if let Some(voted_for) = persistent_state.voted_for {
                     success &= voted_for != sender;
                 }
@@ -60,7 +58,39 @@ impl RaftStateGeneric<Follower> {
                     None,
                 )
             }
+            RequestType::Append {
+                prev_log_length,
+                prev_log_term,
+                entries,
+                leader_commit,
+            } => {
+                let mut success = true;
+                success &= persistent_state.current_term <= term;
+                persistent_state.last_heartbeat = Some(SystemTime::now());
+                (
+                    Vec::from([Request {
+                        sender: persistent_state.id,
+                        reciever: sender,
+                        term: persistent_state.current_term,
+                        data: RequestType::AppendResponse { success },
+                    }]),
+                    None,
+                )
+            }
             _ => (Vec::default(), None),
         }
+    }
+
+    fn check_timeout(
+        &mut self,
+        persistent_state: &mut PersistentState<T>,
+    ) -> (Vec<Request<T>>, Option<RaftStateWrapper>) {
+        if let Some(last_heartbeat) = persistent_state.last_heartbeat {
+            let now = SystemTime::now();
+            if now.duration_since(last_heartbeat).unwrap().as_millis() < FOLLOWER_TIMEOUT {
+                return (Vec::default(), None);
+            }
+        }
+        RaftStateGeneric::<Candidate>::call_election(persistent_state)
     }
 }

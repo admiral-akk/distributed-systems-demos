@@ -32,8 +32,11 @@ impl<T: DataType> Switch<T> {
         loop {
             let request = switch.reciever.recv().await;
             if let Ok(request) = request {
-                let senders = switch.senders.lock().await;
-                senders[&request.reciever].send(request).await;
+                let socket = {
+                    let senders = switch.senders.lock().await;
+                    senders[&request.reciever].clone()
+                };
+                socket.send(request).await;
             }
         }
     }

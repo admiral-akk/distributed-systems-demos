@@ -1,28 +1,24 @@
+use std::time::SystemTime;
+
 use super::{
     follower::Follower,
     raft_state::{Handler, RaftStateGeneric, RaftStateWrapper},
 };
-use crate::data::{
-    data_type::DataType,
-    persistent_state::PersistentState,
-    request::{Request, RequestType},
-};
+use crate::data::{data_type::DataType, persistent_state::PersistentState, request::Request};
 
 pub struct Offline {}
 
-// Does nothing. Only request it handles is booting up.
+// Does nothing. Only request it handles is timeout, which it assumes is a reboot request.
 impl<T: DataType> Handler<T> for RaftStateGeneric<Offline> {
-    fn handle(
+    fn check_timeout(
         &mut self,
-        request: Request<T>,
-        _: &mut PersistentState<T>,
+        persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T>>, Option<RaftStateWrapper>) {
-        match request.data {
-            RequestType::Bootup {} => (
-                Vec::default(),
-                Some(RaftStateGeneric::<Follower>::default().into()),
-            ),
-            _ => (Vec::default(), None),
-        }
+        println!("{} waking up!", persistent_state.id);
+        persistent_state.last_heartbeat = Some(SystemTime::now());
+        (
+            Vec::default(),
+            Some(RaftStateGeneric::<Follower>::default().into()),
+        )
     }
 }

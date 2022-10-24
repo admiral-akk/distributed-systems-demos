@@ -1,9 +1,14 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, time::SystemTime};
 
-use crate::data::{data_type::DataType, persistent_state::PersistentState, request::Request};
+use crate::data::{
+    data_type::DataType,
+    persistent_state::PersistentState,
+    request::{Request, RequestType},
+};
 
 use super::{
     candidate::{self, Candidate},
+    follower::Follower,
     raft_state::{Handler, RaftStateGeneric, RaftStateWrapper},
 };
 
@@ -15,10 +20,30 @@ pub struct Leader {
 impl Leader {}
 
 impl RaftStateGeneric<Leader> {
+    fn heartbeat<T: DataType>(persistent_state: &mut PersistentState<T>) -> Vec<Request<T>> {
+        persistent_state
+            .other_servers()
+            .iter()
+            .map(|id| Request {
+                sender: persistent_state.id,
+                reciever: *id,
+                term: persistent_state.current_term,
+                data: RequestType::Append {
+                    prev_log_length: 0,
+                    prev_log_term: 0,
+                    entries: Vec::new(),
+                    leader_commit: 0,
+                },
+            })
+            .collect()
+    }
+
     pub fn from_candidate<T: DataType>(
         candidate: &RaftStateGeneric<Candidate>,
-        persistent_state: &PersistentState<T>,
+        persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T>>, Option<RaftStateWrapper>) {
+        persistent_state.current_term += 1;
+        println!("{} elected leader!", persistent_state.id);
         let leader = Leader {
             next_index: persistent_state
                 .other_servers()
@@ -35,7 +60,7 @@ impl RaftStateGeneric<Leader> {
             state: leader,
             volitile_state: candidate.volitile_state,
         };
-        (Vec::new(), Some(wrapper.into()))
+        (Self::heartbeat(persistent_state), Some(wrapper.into()))
     }
 }
 
@@ -45,6 +70,22 @@ impl<T: DataType> Handler<T> for RaftStateGeneric<Leader> {
         request: Request<T>,
         persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T>>, Option<RaftStateWrapper>) {
+        let (sender, term) = (request.sender, request.term);
+        if term > persistent_state.current_term {
+            persistent_state.current_term = term;
+            persistent_state.last_heartbeat = Some(SystemTime::now());
+            persistent_state.voted_for = None;
+            return (
+                Vec::default(),
+                Some(
+                    RaftStateGeneric::<Follower> {
+                        state: Default::default(),
+                        volitile_state: self.volitile_state,
+                    }
+                    .into(),
+                ),
+            );
+        }
         (Vec::default(), None)
     }
 }

@@ -1,3 +1,5 @@
+use std::time::SystemTime;
+
 use crate::data::{
     data_type::DataType, persistent_state::PersistentState, request::Request,
     volitile_state::VolitileState,
@@ -56,7 +58,17 @@ pub struct State<T: DataType> {
     pub raft_state: RaftStateWrapper,
 }
 
+const TIMEOUT_MILLIS: u128 = 500;
+
 impl<T: DataType> State<T> {
+    pub fn check_timeout(&mut self) -> Vec<Request<T>> {
+        let (responses, next) = self.raft_state.check_timeout(&mut self.persistent_state);
+        if let Some(next) = next {
+            self.raft_state = next;
+        }
+        responses
+    }
+
     pub fn handle(&mut self, request: Request<T>) -> Vec<Request<T>> {
         if request.term > self.persistent_state.current_term {
             self.persistent_state.current_term = request.term;
@@ -75,10 +87,31 @@ pub trait Handler<T: DataType> {
         &mut self,
         request: Request<T>,
         persistent_state: &mut PersistentState<T>,
-    ) -> (Vec<Request<T>>, Option<RaftStateWrapper>);
+    ) -> (Vec<Request<T>>, Option<RaftStateWrapper>) {
+        (Vec::default(), None)
+    }
+
+    fn check_timeout(
+        &mut self,
+        _: &mut PersistentState<T>,
+    ) -> (Vec<Request<T>>, Option<RaftStateWrapper>) {
+        (Vec::default(), None)
+    }
 }
 
 impl RaftStateWrapper {
+    pub fn check_timeout<T: DataType>(
+        &mut self,
+        persistent_state: &mut PersistentState<T>,
+    ) -> (Vec<Request<T>>, Option<Self>) {
+        match self {
+            RaftStateWrapper::Offline(offline) => offline.check_timeout(persistent_state),
+            RaftStateWrapper::Candidate(candidate) => candidate.check_timeout(persistent_state),
+            RaftStateWrapper::Leader(leader) => leader.check_timeout(persistent_state),
+            RaftStateWrapper::Follower(follower) => follower.check_timeout(persistent_state),
+        }
+    }
+
     pub fn handle<T: DataType>(
         &mut self,
         request: Request<T>,

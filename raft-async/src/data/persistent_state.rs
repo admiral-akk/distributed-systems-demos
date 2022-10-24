@@ -1,4 +1,7 @@
-use std::collections::HashSet;
+use std::{
+    collections::HashSet,
+    time::{Instant, SystemTime},
+};
 
 use crate::raft_server::VolitileState;
 
@@ -20,6 +23,7 @@ pub struct PersistentState<T: DataType> {
     pub voted_for: Option<u32>,
     pub log: Vec<Entry<T>>,
     pub config: Config,
+    pub last_heartbeat: Option<SystemTime>,
 }
 
 impl<T: DataType> PersistentState<T> {
@@ -53,15 +57,20 @@ impl<T: DataType> PersistentState<T> {
         )
     }
 
-    pub fn vote(&self, server: u32) -> Request<T> {
-        let log_length = self.log.len();
-        self.request(
-            RequestType::Vote {
-                log_length,
-                last_log_term: self.prev_term(log_length),
-            },
-            server,
-        )
+    pub fn request_votes(&self) -> Vec<Request<T>> {
+        self.other_servers()
+            .iter()
+            .map(|server| {
+                let log_length = self.log.len();
+                self.request(
+                    RequestType::Vote {
+                        log_length,
+                        last_log_term: self.prev_term(log_length),
+                    },
+                    *server,
+                )
+            })
+            .collect()
     }
 
     pub fn quorum(&self) -> usize {
