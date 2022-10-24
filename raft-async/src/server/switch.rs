@@ -5,6 +5,7 @@ use async_std::{
     sync::{Arc, Mutex},
     task,
 };
+use rand::Rng;
 
 use crate::data::{data_type::DataType, request::Request};
 
@@ -28,10 +29,14 @@ impl<T: DataType> Switch<T> {
     pub fn init(switch: Arc<Switch<T>>) {
         task::spawn(Switch::request_loop(switch));
     }
+
     async fn request_loop(switch: Arc<Switch<T>>) {
         loop {
             let request = switch.reciever.recv().await;
             if let Ok(request) = request {
+                if rand::thread_rng().gen_range(0..100) > 70 {
+                    continue;
+                }
                 let socket = {
                     let senders = switch.senders.lock().await;
                     senders[&request.reciever].clone()
