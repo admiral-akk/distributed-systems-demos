@@ -8,6 +8,7 @@ use crate::data::{
     data_type::DataType,
     persistent_state::PersistentState,
     request::{Request, RequestType},
+    volitile_state::VolitileState,
 };
 
 #[derive(Default)]
@@ -19,7 +20,6 @@ impl Default for RaftStateGeneric<Candidate> {
     fn default() -> Self {
         Self {
             state: Candidate::default(),
-            volitile_state: Default::default(),
         }
     }
 }
@@ -30,6 +30,7 @@ impl<T: DataType> Handler<T> for RaftStateGeneric<Candidate> {
     fn handle(
         &mut self,
         request: Request<T>,
+        volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T>>, Option<RaftStateWrapper>) {
         let (sender, term) = (request.sender, request.term);
@@ -42,7 +43,6 @@ impl<T: DataType> Handler<T> for RaftStateGeneric<Candidate> {
                 Some(
                     RaftStateGeneric::<Follower> {
                         state: Default::default(),
-                        volitile_state: self.volitile_state,
                     }
                     .into(),
                 ),
@@ -55,7 +55,11 @@ impl<T: DataType> Handler<T> for RaftStateGeneric<Candidate> {
                     self.state.votes.insert(request.sender);
                 }
                 if self.state.votes.len() > persistent_state.quorum() {
-                    return RaftStateGeneric::from_candidate(&self, persistent_state);
+                    return RaftStateGeneric::from_candidate(
+                        &self,
+                        volitile_state,
+                        persistent_state,
+                    );
                 }
                 (Vec::default(), None)
             }
@@ -65,6 +69,7 @@ impl<T: DataType> Handler<T> for RaftStateGeneric<Candidate> {
 
     fn check_timeout(
         &mut self,
+        volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T>>, Option<RaftStateWrapper>) {
         if let Some(last_heartbeat) = persistent_state.last_heartbeat {

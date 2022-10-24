@@ -4,7 +4,10 @@ use super::{
     follower::Follower,
     raft_state::{Handler, RaftStateGeneric, RaftStateWrapper},
 };
-use crate::data::{data_type::DataType, persistent_state::PersistentState, request::Request};
+use crate::data::{
+    data_type::DataType, persistent_state::PersistentState, request::Request,
+    volitile_state::VolitileState,
+};
 
 pub struct Offline {}
 
@@ -12,6 +15,7 @@ pub struct Offline {}
 impl<T: DataType> Handler<T> for RaftStateGeneric<Offline> {
     fn check_timeout(
         &mut self,
+        volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T>>, Option<RaftStateWrapper>) {
         println!("{} waking up!", persistent_state.id);

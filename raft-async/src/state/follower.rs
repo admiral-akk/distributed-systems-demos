@@ -4,6 +4,7 @@ use crate::data::{
     data_type::DataType,
     persistent_state::PersistentState,
     request::{Request, RequestType},
+    volitile_state::VolitileState,
 };
 
 use super::{
@@ -18,7 +19,6 @@ impl Default for RaftStateGeneric<Follower> {
     fn default() -> Self {
         Self {
             state: Follower::default(),
-            volitile_state: Default::default(),
         }
     }
 }
@@ -29,6 +29,7 @@ impl<T: DataType> Handler<T> for RaftStateGeneric<Follower> {
     fn handle(
         &mut self,
         request: Request<T>,
+        volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T>>, Option<RaftStateWrapper>) {
         let (sender, term) = (request.sender, request.term);
@@ -83,6 +84,7 @@ impl<T: DataType> Handler<T> for RaftStateGeneric<Follower> {
 
     fn check_timeout(
         &mut self,
+        volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T>>, Option<RaftStateWrapper>) {
         if let Some(last_heartbeat) = persistent_state.last_heartbeat {

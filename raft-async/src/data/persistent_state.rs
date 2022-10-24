@@ -1,7 +1,4 @@
-use std::{
-    collections::HashSet,
-    time::{Instant, SystemTime},
-};
+use std::{collections::HashSet, time::SystemTime};
 
 use crate::raft_server::VolitileState;
 

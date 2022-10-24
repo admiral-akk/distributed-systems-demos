@@ -4,6 +4,7 @@ use crate::data::{
     data_type::DataType,
     persistent_state::PersistentState,
     request::{Request, RequestType},
+    volitile_state::{self, VolitileState},
 };
 
 use super::{
@@ -40,6 +41,7 @@ impl RaftStateGeneric<Leader> {
 
     pub fn from_candidate<T: DataType>(
         candidate: &RaftStateGeneric<Candidate>,
+        volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T>>, Option<RaftStateWrapper>) {
         persistent_state.current_term += 1;
@@ -56,10 +58,7 @@ impl RaftStateGeneric<Leader> {
                 .map(|id| (*id, 0))
                 .collect(),
         };
-        let wrapper = RaftStateGeneric {
-            state: leader,
-            volitile_state: candidate.volitile_state,
-        };
+        let wrapper = RaftStateGeneric { state: leader };
         (Self::heartbeat(persistent_state), Some(wrapper.into()))
     }
 }
@@ -68,6 +67,7 @@ impl<T: DataType> Handler<T> for RaftStateGeneric<Leader> {
     fn handle(
         &mut self,
         request: Request<T>,
+        volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T>>, Option<RaftStateWrapper>) {
         let (sender, term) = (request.sender, request.term);
@@ -80,7 +80,6 @@ impl<T: DataType> Handler<T> for RaftStateGeneric<Leader> {
                 Some(
                     RaftStateGeneric::<Follower> {
                         state: Default::default(),
-                        volitile_state: self.volitile_state,
                     }
                     .into(),
                 ),
