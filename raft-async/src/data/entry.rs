@@ -1,4 +1,7 @@
-pub struct Entry<DataType> {
+use super::data_type::DataType;
+
+#[derive(Clone, Copy)]
+pub struct Entry<T: DataType> {
     pub term: u32,
-    pub data: DataType,
+    pub data: T,
 }

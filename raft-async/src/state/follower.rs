@@ -1,4 +1,7 @@
-use crate::data::request::{Request, RequestType};
+use crate::data::{
+    data_type::DataType,
+    request::{Request, RequestType},
+};
 
 use super::{
     candidate::Candidate,
@@ -9,15 +12,14 @@ use super::{
 
 pub struct Follower {}
 
-impl<DataType> RaftStateGeneric<DataType, Follower> {
-    pub fn handle(
-        mut self,
-        request: Request<DataType>,
-    ) -> (Vec<Request<DataType>>, RaftStateWrapper<DataType>) {
+impl<T: DataType> RaftStateGeneric<T, Follower> {
+    pub fn handle(mut self, request: Request<T>) -> (Vec<Request<T>>, RaftStateWrapper<T>) {
         let (sender, term) = (request.sender, request.term);
         if term < self.persistent_state.current_term {
             self.persistent_state.current_term = term;
             self.persistent_state.voted_for = None;
+            let follower = RaftStateGeneric::<T, Follower>::from(self);
+            return follower.handle(request);
         }
         match request.data {
             RequestType::Vote {
@@ -48,11 +50,9 @@ impl<DataType> RaftStateGeneric<DataType, Follower> {
     }
 }
 
-impl<DataType> From<RaftStateGeneric<DataType, Candidate>>
-    for RaftStateGeneric<DataType, Follower>
-{
-    fn from(candidate: RaftStateGeneric<DataType, Candidate>) -> Self {
-        RaftStateGeneric::<DataType, Follower> {
+impl<T: DataType> From<RaftStateGeneric<T, Candidate>> for RaftStateGeneric<T, Follower> {
+    fn from(candidate: RaftStateGeneric<T, Candidate>) -> Self {
+        RaftStateGeneric::<T, Follower> {
             state: Follower {},
             persistent_state: candidate.persistent_state,
             volitile_state: candidate.volitile_state,
@@ -60,9 +60,9 @@ impl<DataType> From<RaftStateGeneric<DataType, Candidate>>
     }
 }
 
-impl<DataType> From<RaftStateGeneric<DataType, Offline>> for RaftStateGeneric<DataType, Follower> {
-    fn from(offline: RaftStateGeneric<DataType, Offline>) -> Self {
-        RaftStateGeneric::<DataType, Follower> {
+impl<T: DataType> From<RaftStateGeneric<T, Offline>> for RaftStateGeneric<T, Follower> {
+    fn from(offline: RaftStateGeneric<T, Offline>) -> Self {
+        RaftStateGeneric::<T, Follower> {
             state: Follower {},
             persistent_state: offline.persistent_state,
             volitile_state: VolitileState::default(),
@@ -70,9 +70,9 @@ impl<DataType> From<RaftStateGeneric<DataType, Offline>> for RaftStateGeneric<Da
     }
 }
 
-impl<DataType> From<RaftStateGeneric<DataType, Leader>> for RaftStateGeneric<DataType, Follower> {
-    fn from(leader: RaftStateGeneric<DataType, Leader>) -> Self {
-        RaftStateGeneric::<DataType, Follower> {
+impl<T: DataType> From<RaftStateGeneric<T, Leader>> for RaftStateGeneric<T, Follower> {
+    fn from(leader: RaftStateGeneric<T, Leader>) -> Self {
+        RaftStateGeneric::<T, Follower> {
             state: Follower {},
             persistent_state: leader.persistent_state,
             volitile_state: leader.volitile_state,

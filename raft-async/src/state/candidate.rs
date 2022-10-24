@@ -5,37 +5,32 @@ use super::{
     leader::Leader,
     raft_state::{RaftStateGeneric, RaftStateWrapper},
 };
-use crate::data::request::{Request, RequestType};
+use crate::data::{
+    data_type::DataType,
+    request::{Request, RequestType},
+};
 
 #[derive(Default)]
 pub struct Candidate {
     votes: HashSet<u32>,
 }
 
-impl<DataType> RaftStateGeneric<DataType, Candidate> {
-    pub fn handle(
-        mut self,
-        request: Request<DataType>,
-    ) -> (Vec<Request<DataType>>, RaftStateWrapper<DataType>) {
+impl<T: DataType> RaftStateGeneric<T, Candidate> {
+    pub fn handle(mut self, request: Request<T>) -> (Vec<Request<T>>, RaftStateWrapper<T>) {
         let (sender, term) = (request.sender, request.term);
         if term < self.persistent_state.current_term {
             self.persistent_state.current_term = term;
             self.persistent_state.voted_for = None;
-            return (
-                Vec::default(),
-                RaftStateGeneric::<DataType, Follower>::from(self).into(),
-            );
+            let follower = RaftStateGeneric::<T, Follower>::from(self);
+            return follower.handle(request);
         }
         match request.data {
             RequestType::VoteResponse { success } => {
                 if success {
                     self.state.votes.insert(sender);
                 }
-                if self.state.votes.len() > self.persistent_state.config.quorum() {
-                    return (
-                        Vec::default(),
-                        RaftStateGeneric::<DataType, Leader>::from(self).into(),
-                    );
+                if self.state.votes.len() > self.persistent_state.quorum() {
+                    return RaftStateGeneric::<T, Leader>::from(self).heartbeat();
                 }
                 (Vec::default(), self.into())
             }
@@ -44,11 +39,9 @@ impl<DataType> RaftStateGeneric<DataType, Candidate> {
     }
 }
 
-impl<DataType> From<RaftStateGeneric<DataType, Follower>>
-    for RaftStateGeneric<DataType, Candidate>
-{
-    fn from(follower: RaftStateGeneric<DataType, Follower>) -> Self {
-        RaftStateGeneric::<DataType, Candidate> {
+impl<T: DataType> From<RaftStateGeneric<T, Follower>> for RaftStateGeneric<T, Candidate> {
+    fn from(follower: RaftStateGeneric<T, Follower>) -> Self {
+        RaftStateGeneric::<T, Candidate> {
             state: Candidate {
                 votes: HashSet::from([follower.persistent_state.id]),
             },

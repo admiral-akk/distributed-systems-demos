@@ -1,14 +1,19 @@
-pub struct Request<T> {
+use super::data_type::DataType;
+use super::entry::Entry;
+
+#[derive(Clone)]
+pub struct Request<T: DataType> {
     pub sender: u32,
     pub term: u32,
     pub data: RequestType<T>,
 }
 
-pub enum RequestType<T> {
+#[derive(Clone)]
+pub enum RequestType<T: DataType> {
     Append {
-        prev_log_index: usize,
+        prev_log_length: usize,
         prev_log_term: u32,
-        entries: Vec<T>,
+        entries: Vec<Entry<T>>,
         leader_commit: usize,
     },
     AppendResponse {

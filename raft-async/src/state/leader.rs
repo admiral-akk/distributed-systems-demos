@@ -1,6 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-use crate::data::request::Request;
+use crate::data::{
+    data_type::DataType,
+    request::{Request, RequestType},
+};
 
 use super::{
     candidate::Candidate,
@@ -14,57 +17,56 @@ pub struct Leader {
 }
 
 impl Leader {
-    pub fn new<DataType>(
-        persistent_state: &PersistentState<DataType>,
-        servers: &HashSet<u32>,
-    ) -> Self {
-        let other_servers = servers
-            .iter()
-            .filter(|id| !persistent_state.id.eq(id))
-            .map(|id| *id)
-            .collect::<Vec<_>>();
-
+    pub fn new<T: DataType>(persistent_state: &PersistentState<T>) -> Self {
         Leader {
-            next_index: other_servers
+            next_index: persistent_state
+                .other_servers()
                 .iter()
                 .map(|id| (*id, persistent_state.log.len()))
                 .collect(),
-            commit_index: other_servers.iter().map(|id| (*id, 0)).collect(),
+            commit_index: persistent_state
+                .other_servers()
+                .iter()
+                .map(|id| (*id, 0))
+                .collect(),
         }
     }
 }
 
-impl Default for Leader {
-    fn default() -> Self {
-        Self {
-            next_index: Default::default(),
-            commit_index: Default::default(),
-        }
+impl<T: DataType> RaftStateGeneric<T, Leader> {
+    fn heartbeat_request(&self, server: u32) -> Request<T> {
+        let index = self.state.next_index[&server];
+        self.persistent_state
+            .append(&self.volitile_state, index, server)
     }
-}
 
-impl<DataType> RaftStateGeneric<DataType, Leader> {
-    pub fn handle(
-        mut self,
-        request: Request<DataType>,
-    ) -> (Vec<Request<DataType>>, RaftStateWrapper<DataType>) {
+    pub fn heartbeat(mut self) -> (Vec<Request<T>>, RaftStateWrapper<T>) {
+        (
+            self.persistent_state
+                .other_servers()
+                .iter()
+                .map(|id| self.heartbeat_request(*id))
+                .collect(),
+            self.into(),
+        )
+    }
+
+    pub fn handle(mut self, request: Request<T>) -> (Vec<Request<T>>, RaftStateWrapper<T>) {
         let (sender, term) = (request.sender, request.term);
         if term < self.persistent_state.current_term {
             self.persistent_state.current_term = term;
             self.persistent_state.voted_for = None;
-            return (
-                Vec::default(),
-                RaftStateGeneric::<DataType, Follower>::from(self).into(),
-            );
+            let follower = RaftStateGeneric::<T, Follower>::from(self);
+            return follower.handle(request);
         }
         (Vec::default(), self.into())
     }
 }
 
-impl<DataType> From<RaftStateGeneric<DataType, Candidate>> for RaftStateGeneric<DataType, Leader> {
-    fn from(leader: RaftStateGeneric<DataType, Candidate>) -> Self {
-        RaftStateGeneric::<DataType, Leader> {
-            state: Leader::default(),
+impl<T: DataType> From<RaftStateGeneric<T, Candidate>> for RaftStateGeneric<T, Leader> {
+    fn from(leader: RaftStateGeneric<T, Candidate>) -> Self {
+        RaftStateGeneric::<T, Leader> {
+            state: Leader::new(&leader.persistent_state),
             persistent_state: leader.persistent_state,
             volitile_state: leader.volitile_state,
         }
