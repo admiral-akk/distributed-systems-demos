@@ -1,10 +1,13 @@
 use async_std::task;
 use raft_server::RaftServer;
 
+mod data;
 mod raft_channel;
 mod raft_request;
 mod raft_server;
 mod raft_socket;
+mod state;
+
 fn main() {
     let servers = (0..5)
         .map(|i| RaftServer::<u32>::new(i))
