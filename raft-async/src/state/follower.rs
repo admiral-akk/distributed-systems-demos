@@ -10,14 +10,6 @@ impl<DataType> RaftStateGeneric<DataType, Follower> {
         request: Request<DataType>,
     ) -> (Vec<Request<DataType>>, RaftStateWrapper<DataType>) {
         match request {
-            Request::Append {
-                sender,
-                term,
-                prev_log_index,
-                prev_log_term,
-                entries,
-                leader_commit,
-            } => todo!(),
             Request::Vote {
                 sender,
                 term,
