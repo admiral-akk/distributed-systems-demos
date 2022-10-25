@@ -5,7 +5,7 @@ use crate::{
         data_type::DataType,
         persistent_state::PersistentState,
         request::{
-            self, Append, AppendResponse, Client, ClientResponse, Event, Request, Timeout, Vote,
+            Append, AppendResponse, Client, ClientResponse, Event, Request, Timeout, Vote,
             VoteResponse,
         },
         volitile_state::VolitileState,
