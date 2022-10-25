@@ -18,7 +18,7 @@ pub struct PersistentState<T: DataType> {
 }
 
 impl<T: DataType> PersistentState<T> {
-    fn prev_term(&self, index: usize) -> u32 {
+    pub fn prev_term(&self, index: usize) -> u32 {
         if self.log.is_empty() || index == 0 {
             0
         } else if index <= self.log.len() {

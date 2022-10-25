@@ -5,6 +5,7 @@ use async_std::{
     sync::{Arc, Mutex},
     task,
 };
+use rand::Rng;
 
 use crate::{
     data::{
@@ -58,7 +59,11 @@ where
         loop {
             let (timeout, keep_alive) = {
                 let state = server.state.lock().await;
-                (state.timeout_length(), state.persistent_state.keep_alive)
+                let timeout = state.timeout_length();
+                (
+                    rand::thread_rng().gen_range(timeout..(2 * timeout)),
+                    state.persistent_state.keep_alive,
+                )
             };
             task::sleep(timeout).await;
             // Check if keep alive has been incremented. If not, then we've timed out.

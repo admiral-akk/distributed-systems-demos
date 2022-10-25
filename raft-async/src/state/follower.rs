@@ -7,7 +7,10 @@ use crate::data::{
     volitile_state::VolitileState,
 };
 
-use super::raft_state::{EventHandler, Handler, RaftState, TimeoutHandler};
+use super::{
+    candidate::Candidate,
+    raft_state::{EventHandler, Handler, RaftState, TimeoutHandler},
+};
 
 #[derive(Default)]
 pub struct Follower {}
@@ -20,7 +23,18 @@ impl TimeoutHandler for Follower {
 }
 
 impl<T: DataType> EventHandler<AppendResponse, T> for Follower {}
-impl<T: DataType> EventHandler<Timeout, T> for Follower {}
+impl<T: DataType> EventHandler<Timeout, T> for Follower {
+    fn handle_event(
+        &mut self,
+        volitile_state: &mut VolitileState,
+        persistent_state: &mut PersistentState<T>,
+        sender: u32,
+        term: u32,
+        event: Timeout,
+    ) -> (Vec<Request<T>>, Option<RaftState>) {
+        Candidate::call_election(persistent_state)
+    }
+}
 impl<T: DataType> EventHandler<VoteResponse, T> for Follower {}
 impl<T: DataType> EventHandler<Vote, T> for Follower {
     fn handle_event(
@@ -68,6 +82,7 @@ impl<T: DataType> EventHandler<Append<T>, T> for Follower {
         if success {
             // We have a valid leader.
             persistent_state.keep_alive += 1;
+            persistent_state.voted_for = Some(sender);
         }
         // If we don't have the previous entry, then the append fails.
         success &= persistent_state.log.len() >= event.prev_log_length;

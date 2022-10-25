@@ -2,10 +2,15 @@ use std::time::Duration;
 
 use crate::data::{
     data_type::DataType,
-    request::{Append, AppendResponse, Timeout, Vote, VoteResponse},
+    persistent_state::PersistentState,
+    request::{Append, AppendResponse, Request, Timeout, Vote, VoteResponse},
+    volitile_state::VolitileState,
 };
 
-use super::raft_state::{EventHandler, Handler, TimeoutHandler};
+use super::{
+    follower::Follower,
+    raft_state::{EventHandler, Handler, RaftState, TimeoutHandler},
+};
 
 pub struct Offline {}
 
@@ -24,6 +29,17 @@ impl<T: DataType> EventHandler<Vote, T> for Offline {}
 
 impl<T: DataType> EventHandler<VoteResponse, T> for Offline {}
 
-impl<T: DataType> EventHandler<Timeout, T> for Offline {}
+impl<T: DataType> EventHandler<Timeout, T> for Offline {
+    fn handle_event(
+        &mut self,
+        volitile_state: &mut VolitileState,
+        persistent_state: &mut PersistentState<T>,
+        sender: u32,
+        term: u32,
+        event: Timeout,
+    ) -> (Vec<Request<T>>, Option<RaftState>) {
+        (Vec::new(), Some(Follower::default().into()))
+    }
+}
 
 impl<T: DataType> EventHandler<AppendResponse, T> for Offline {}

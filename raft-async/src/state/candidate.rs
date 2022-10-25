@@ -8,24 +8,41 @@ use super::{
 use crate::data::{
     data_type::DataType,
     persistent_state::PersistentState,
-    request::{Append, AppendResponse, Request, Timeout, Vote, VoteResponse},
+    request::{Append, AppendResponse, Event, Request, Timeout, Vote, VoteResponse},
     volitile_state::VolitileState,
 };
 
 #[derive(Default)]
 pub struct Candidate {
+    attempts: u32,
     votes: HashSet<u32>,
 }
 impl TimeoutHandler for Candidate {
     fn timeout_length(&self) -> Duration {
-        Duration::from_millis(3000)
+        Duration::from_millis(1000)
     }
 }
 
 impl<T: DataType> Handler<T> for Candidate {}
 impl<T: DataType> EventHandler<Vote, T> for Candidate {}
 impl<T: DataType> EventHandler<AppendResponse, T> for Candidate {}
-impl<T: DataType> EventHandler<Timeout, T> for Candidate {}
+impl<T: DataType> EventHandler<Timeout, T> for Candidate {
+    fn handle_event(
+        &mut self,
+        volitile_state: &mut VolitileState,
+        persistent_state: &mut PersistentState<T>,
+        sender: u32,
+        term: u32,
+        event: Timeout,
+    ) -> (Vec<Request<T>>, Option<RaftState>) {
+        self.attempts += 1;
+        if self.attempts > 3 {
+            Candidate::call_election(persistent_state)
+        } else {
+            (Candidate::request_votes(persistent_state), None)
+        }
+    }
+}
 
 impl<T: DataType> EventHandler<Append<T>, T> for Candidate {
     fn handle_event(
@@ -63,6 +80,21 @@ impl<T: DataType> EventHandler<VoteResponse, T> for Candidate {
 }
 
 impl Candidate {
+    fn request_votes<T: DataType>(persistent_state: &mut PersistentState<T>) -> Vec<Request<T>> {
+        persistent_state
+            .other_servers()
+            .iter()
+            .map(|id| Request::<T> {
+                sender: persistent_state.id,
+                reciever: *id,
+                term: persistent_state.current_term,
+                event: Event::Vote(Vote {
+                    log_length: persistent_state.log.len(),
+                    last_log_term: persistent_state.prev_term(persistent_state.log.len()),
+                }),
+            })
+            .collect()
+    }
     pub fn call_election<T: DataType>(
         persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
@@ -70,6 +102,9 @@ impl Candidate {
         persistent_state.current_term += 1;
         persistent_state.voted_for = Some(persistent_state.id);
         persistent_state.keep_alive += 1;
-        (Vec::new(), Some(Candidate::default().into()))
+        (
+            Candidate::request_votes(persistent_state),
+            Some(Candidate::default().into()),
+        )
     }
 }

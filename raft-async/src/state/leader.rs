@@ -95,7 +95,18 @@ impl Leader {
 impl<T: DataType> Handler<T> for Leader {}
 impl<T: DataType> EventHandler<Vote, T> for Leader {}
 impl<T: DataType> EventHandler<VoteResponse, T> for Leader {}
-impl<T: DataType> EventHandler<Timeout, T> for Leader {}
+impl<T: DataType> EventHandler<Timeout, T> for Leader {
+    fn handle_event(
+        &mut self,
+        volitile_state: &mut VolitileState,
+        persistent_state: &mut PersistentState<T>,
+        sender: u32,
+        term: u32,
+        event: Timeout,
+    ) -> (Vec<Request<T>>, Option<RaftState>) {
+        (self.send_heartbeat(volitile_state, persistent_state), None)
+    }
+}
 impl<T: DataType> EventHandler<Append<T>, T> for Leader {}
 impl<T: DataType> EventHandler<AppendResponse, T> for Leader {
     fn handle_event(

@@ -110,11 +110,21 @@ impl<T: DataType> State<T> {
     }
 
     pub fn handle_request(&mut self, request: Request<T>) -> Vec<Request<T>> {
-        if request.term > self.persistent_state.current_term {
-            self.persistent_state.current_term = request.term;
-            self.persistent_state.voted_for = None;
-            self.raft_state = RaftState::Follower(Follower::default());
+        match self.raft_state {
+            RaftState::Offline(_) => {}
+            _ => {
+                if request.term > self.persistent_state.current_term {
+                    println!(
+                        "New term, {} reverting to follower.",
+                        self.persistent_state.id
+                    );
+                    self.persistent_state.current_term = request.term;
+                    self.persistent_state.voted_for = None;
+                    self.raft_state = RaftState::Follower(Follower::default());
+                }
+            }
         }
+
         let (responses, next) = self.raft_state.handle_request(
             request,
             &mut self.volitile_state,
