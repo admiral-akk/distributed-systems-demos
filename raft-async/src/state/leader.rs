@@ -12,7 +12,8 @@ use crate::data::{
 
 use super::{
     candidate::Candidate,
-    raft_state::{EventHandler, Handler, RaftState, TimeoutHandler},
+    handler::{EventHandler, Handler, TimeoutHandler},
+    raft_state::RaftState,
 };
 
 pub struct Leader {

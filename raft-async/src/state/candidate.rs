@@ -2,8 +2,9 @@ use std::{collections::HashSet, time::Duration};
 
 use super::{
     follower::Follower,
+    handler::{EventHandler, Handler, TimeoutHandler},
     leader::Leader,
-    raft_state::{EventHandler, Handler, RaftState, TimeoutHandler},
+    raft_state::RaftState,
 };
 use crate::data::{
     data_type::DataType,

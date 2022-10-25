@@ -12,9 +12,8 @@ use crate::{
         data_type::DataType,
         persistent_state::{Config, PersistentState},
         request::{Event, Request, Timeout},
-        volitile_state::VolitileState,
     },
-    state::raft_state::{RaftState, State},
+    state::state::State,
 };
 
 use super::switch::Switch;
@@ -36,17 +35,12 @@ where
             input,
             output,
             server_sender,
-            state: Mutex::new(State {
-                persistent_state: PersistentState {
-                    id,
-                    config: Config {
-                        servers: HashSet::from([0, 1, 2, 3, 4]),
-                    },
-                    ..Default::default()
+            state: Mutex::new(State::new(
+                id,
+                Config {
+                    servers: HashSet::from([0, 1, 2, 3, 4]),
                 },
-                raft_state: RaftState::default(),
-                volitile_state: VolitileState::default(),
-            }),
+            )),
         }
     }
 

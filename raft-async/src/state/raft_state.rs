@@ -1,16 +1,17 @@
 use std::time::Duration;
 
 use crate::data::{
-    data_type::DataType,
-    persistent_state::PersistentState,
-    request::{
-        Append, AppendResponse, Client, ClientResponse, Event, Request, Timeout, Vote, VoteResponse,
-    },
+    data_type::DataType, persistent_state::PersistentState, request::Request,
     volitile_state::VolitileState,
 };
 
-use super::{candidate::Candidate, follower::Follower, leader::Leader, offline::Offline};
-
+use super::{
+    candidate::Candidate,
+    follower::Follower,
+    handler::{Handler, TimeoutHandler},
+    leader::Leader,
+    offline::Offline,
+};
 pub enum RaftState {
     Offline(Offline),
     Candidate(Candidate),
@@ -43,104 +44,6 @@ impl From<Follower> for RaftState {
 impl From<Candidate> for RaftState {
     fn from(candidate: Candidate) -> Self {
         RaftState::Candidate(candidate)
-    }
-}
-pub trait TimeoutHandler {
-    fn timeout_length(&self) -> Duration;
-}
-
-pub trait EventHandler<EventType, T: DataType> {
-    fn handle_event(
-        &mut self,
-        _volitile_state: &mut VolitileState,
-        _persistent_state: &mut PersistentState<T>,
-        _sender: u32,
-        _term: u32,
-        _event: EventType,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
-        (Vec::default(), None)
-    }
-}
-
-pub trait Handler<T: DataType>:
-    EventHandler<Append<T>, T>
-    + EventHandler<AppendResponse, T>
-    + EventHandler<Timeout, T>
-    + EventHandler<Vote, T>
-    + EventHandler<VoteResponse, T>
-    + EventHandler<Client<T>, T>
-    + EventHandler<ClientResponse<T>, T>
-{
-    fn handle_request(
-        &mut self,
-        volitile_state: &mut VolitileState,
-        persistent_state: &mut PersistentState<T>,
-        request: Request<T>,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
-        let (sender, term) = (request.sender, request.term);
-        match request.event {
-            Event::Append(event) => {
-                self.handle_event(volitile_state, persistent_state, sender, term, event)
-            }
-            Event::AppendResponse(event) => {
-                self.handle_event(volitile_state, persistent_state, sender, term, event)
-            }
-            Event::Vote(event) => {
-                self.handle_event(volitile_state, persistent_state, sender, term, event)
-            }
-            Event::VoteResponse(event) => {
-                self.handle_event(volitile_state, persistent_state, sender, term, event)
-            }
-            Event::Timeout(event) => {
-                self.handle_event(volitile_state, persistent_state, sender, term, event)
-            }
-            Event::Client(event) => {
-                self.handle_event(volitile_state, persistent_state, sender, term, event)
-            }
-            Event::ClientResponse(event) => {
-                self.handle_event(volitile_state, persistent_state, sender, term, event)
-            }
-        }
-    }
-}
-
-pub struct State<T: DataType> {
-    pub persistent_state: PersistentState<T>,
-    pub raft_state: RaftState,
-    pub volitile_state: VolitileState,
-}
-
-impl<T: DataType> State<T> {
-    pub fn timeout_length(&self) -> Duration {
-        self.raft_state.timeout_length()
-    }
-
-    pub fn handle_request(&mut self, request: Request<T>) -> Vec<Request<T>> {
-        // Todo: Maybe find better place to put this, since State shouldn't be aware of how each state updates.
-        match self.raft_state {
-            RaftState::Offline(_) => {}
-            _ => {
-                if request.term > self.persistent_state.current_term {
-                    println!(
-                        "New term, {} reverting to follower.",
-                        self.persistent_state.id
-                    );
-                    self.persistent_state.current_term = request.term;
-                    self.persistent_state.voted_for = None;
-                    self.raft_state = RaftState::Follower(Follower::default());
-                }
-            }
-        }
-
-        let (responses, next) = self.raft_state.handle_request(
-            request,
-            &mut self.volitile_state,
-            &mut self.persistent_state,
-        );
-        if let Some(next) = next {
-            self.raft_state = next;
-        }
-        responses
     }
 }
 
