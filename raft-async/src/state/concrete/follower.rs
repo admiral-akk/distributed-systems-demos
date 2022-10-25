@@ -210,6 +210,7 @@ mod tests {
             panic!("Didn't transition to candidate!");
         }
         assert!(requests.len() == 2);
+        assert_eq!(persistent_state.keep_alive, 1);
         for request in requests {
             assert!(request.sender == persistent_state.id);
             assert!(request.term == persistent_state.current_term);
@@ -258,6 +259,7 @@ mod tests {
         assert!(next.is_none());
         assert!(requests.len() == 1);
         assert!(persistent_state.current_term == 6);
+        assert_eq!(persistent_state.keep_alive, 0);
         assert!(
             persistent_state.voted_for == None,
             "Follower should not redirect to this leader."
@@ -313,6 +315,7 @@ mod tests {
         assert!(requests.len() == 1);
         assert!(persistent_state.current_term == 4);
         assert!(persistent_state.voted_for == Some(0));
+        assert_eq!(persistent_state.keep_alive, 1);
         for request in requests {
             assert!(request.sender == persistent_state.id);
             assert!(request.reciever == 0);
@@ -364,6 +367,7 @@ mod tests {
         assert!(requests.len() == 1);
         assert!(persistent_state.current_term == 4);
         assert!(persistent_state.voted_for == Some(0));
+        assert_eq!(persistent_state.keep_alive, 1);
         for request in requests {
             assert!(request.sender == persistent_state.id);
             assert!(request.reciever == 0);
@@ -416,6 +420,7 @@ mod tests {
         assert!(requests.len() == 1);
         assert!(persistent_state.current_term == 4);
         assert!(persistent_state.voted_for == Some(0));
+        assert_eq!(persistent_state.keep_alive, 1);
         for request in requests {
             assert!(request.sender == persistent_state.id);
             assert!(request.reciever == 0);
@@ -475,6 +480,7 @@ mod tests {
         assert!(requests.len() == 1);
         assert!(persistent_state.current_term == 4);
         assert!(persistent_state.voted_for == Some(0));
+        assert_eq!(persistent_state.keep_alive, 1);
         for request in requests {
             assert!(request.sender == persistent_state.id);
             assert!(request.reciever == 0);
@@ -532,6 +538,7 @@ mod tests {
         assert!(requests.len() == 1);
         assert!(persistent_state.current_term == 4);
         assert!(persistent_state.voted_for == None);
+        assert_eq!(persistent_state.keep_alive, 0);
         for request in requests {
             assert!(request.sender == persistent_state.id);
             assert!(request.reciever == 2);
@@ -585,6 +592,7 @@ mod tests {
         assert!(requests.len() == 1);
         assert!(persistent_state.current_term == 4);
         assert!(persistent_state.voted_for == None);
+        assert_eq!(persistent_state.keep_alive, 0);
         for request in requests {
             assert!(request.sender == persistent_state.id);
             assert!(request.reciever == 2);
@@ -638,6 +646,7 @@ mod tests {
         assert!(requests.len() == 1);
         assert!(persistent_state.current_term == 4);
         assert!(persistent_state.voted_for == None);
+        assert_eq!(persistent_state.keep_alive, 0);
         for request in requests {
             assert!(request.sender == persistent_state.id);
             assert!(request.reciever == 2);
@@ -691,6 +700,7 @@ mod tests {
         assert!(requests.len() == 1);
         assert!(persistent_state.current_term == 4);
         assert!(persistent_state.voted_for == Some(2));
+        assert_eq!(persistent_state.keep_alive, 0);
         for request in requests {
             assert!(request.sender == persistent_state.id);
             assert!(request.reciever == 2);
@@ -744,6 +754,7 @@ mod tests {
         assert!(requests.len() == 1);
         assert!(persistent_state.current_term == 4);
         assert!(persistent_state.voted_for == Some(2));
+        assert_eq!(persistent_state.keep_alive, 0);
         for request in requests {
             assert!(request.sender == persistent_state.id);
             assert!(request.reciever == 2);
@@ -788,6 +799,7 @@ mod tests {
 
         assert!(next.is_none());
         assert_eq!(requests.len(), 1);
+        assert_eq!(persistent_state.keep_alive, 0);
         for request in requests {
             assert_eq!(request.sender, persistent_state.id);
             assert_eq!(request.reciever, 10);
@@ -835,6 +847,7 @@ mod tests {
 
         assert!(next.is_none());
         assert_eq!(requests.len(), 1);
+        assert_eq!(persistent_state.keep_alive, 0);
         for request in requests {
             assert_eq!(request.sender, persistent_state.id);
             assert_eq!(request.reciever, 10);
