@@ -55,7 +55,7 @@ impl<T: DataType> Switch<T> {
 
     pub async fn register(
         &self,
-        id: u32,
+        id: u32, // todo: change id into an enum so you can seperate client/server
     ) -> (Sender<Request<T>>, Sender<Request<T>>, Receiver<Request<T>>) {
         let mut senders = self.senders.lock().await;
         let (server_sender, server_reciever) = channel::unbounded();

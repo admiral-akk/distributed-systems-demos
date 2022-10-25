@@ -120,6 +120,7 @@ impl<T: DataType> State<T> {
     }
 
     pub fn handle_request(&mut self, request: Request<T>) -> Vec<Request<T>> {
+        // Todo: Maybe find better place to put this, since State shouldn't be aware of how each state updates.
         match self.raft_state {
             RaftState::Offline(_) => {}
             _ => {

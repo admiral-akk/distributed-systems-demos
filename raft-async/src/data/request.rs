@@ -2,6 +2,7 @@ use super::data_type::DataType;
 use super::entry::Entry;
 
 pub struct Request<T: DataType> {
+    // Todo: figure out better framing for sender/reciever/term, since it's not relevant to all events.
     pub sender: u32,
     pub reciever: u32,
     pub term: u32,
