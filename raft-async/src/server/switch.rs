@@ -53,10 +53,13 @@ impl<T: DataType> Switch<T> {
         }
     }
 
-    pub async fn register(&self, id: u32) -> (Sender<Request<T>>, Receiver<Request<T>>) {
+    pub async fn register(
+        &self,
+        id: u32,
+    ) -> (Sender<Request<T>>, Sender<Request<T>>, Receiver<Request<T>>) {
         let mut senders = self.senders.lock().await;
         let (server_sender, server_reciever) = channel::unbounded();
-        senders.insert(id, server_sender);
-        (self.sender.clone(), server_reciever)
+        senders.insert(id, server_sender.clone());
+        (self.sender.clone(), server_sender, server_reciever)
     }
 }

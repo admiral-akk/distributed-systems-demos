@@ -1,18 +1,16 @@
-use std::{collections::HashSet, time::Duration};
+use std::collections::HashSet;
 
 use async_std::{
-    channel::{self, Receiver, Sender},
-    future,
+    channel::{Receiver, Sender},
     sync::{Arc, Mutex},
     task,
 };
-use rand::Rng;
 
 use crate::{
     data::{
         data_type::DataType,
         persistent_state::{Config, PersistentState},
-        request::Request,
+        request::{Event, Request, Timeout},
         volitile_state::VolitileState,
     },
     state::raft_state::{RaftState, State},
@@ -24,19 +22,19 @@ pub struct Server<T: DataType> {
     pub state: Mutex<State<T>>,
     pub input: Receiver<Request<T>>,
     pub output: Sender<Request<T>>,
+    pub server_sender: Sender<Request<T>>,
 }
-
-const TIMEOUT_MILLIS_CHECK: u64 = 1000;
 
 impl<T: DataType> Server<T>
 where
     PersistentState<T>: Default,
 {
     pub async fn new(id: u32, switch: Arc<Switch<T>>) -> Self {
-        let (output, input) = switch.register(id).await;
+        let (output, server_sender, input) = switch.register(id).await;
         Self {
             input,
             output,
+            server_sender,
             state: Mutex::new(State {
                 persistent_state: PersistentState {
                     id,
@@ -60,19 +58,25 @@ where
         loop {
             let (timeout, keep_alive) = {
                 let state = server.state.lock().await;
-                (state.timeout(), state.persistent_state.keep_alive)
+                (state.timeout_length(), state.persistent_state.keep_alive)
             };
             task::sleep(timeout).await;
-            let responses = {
-                // Check if keep alive has been incremented. If not, then we've waited too long.
-                let mut state = server.state.lock().await;
-                match state.persistent_state.keep_alive == keep_alive {
-                    true => state.trigger_timeout(),
-                    false => Vec::new(),
-                }
+            // Check if keep alive has been incremented. If not, then we've timed out.
+
+            let timed_out = {
+                let state = server.state.lock().await;
+                state.persistent_state.keep_alive == keep_alive
             };
-            for response in responses {
-                server.output.send(response).await;
+            if timed_out {
+                server
+                    .server_sender
+                    .send(Request {
+                        event: Event::Timeout(Timeout),
+                        sender: 0,
+                        reciever: 0,
+                        term: 0,
+                    })
+                    .await;
             }
         }
     }
@@ -83,7 +87,7 @@ where
             if let Ok(request) = request {
                 let responses = {
                     let mut state = server.state.lock().await;
-                    state.handle(request)
+                    state.handle_request(request)
                 };
 
                 for response in responses {

@@ -1,18 +1,15 @@
-use std::{collections::HashMap, time::SystemTime};
-
-use async_std::channel::Sender;
+use std::{collections::HashMap, time::Duration};
 
 use crate::data::{
     data_type::DataType,
     persistent_state::PersistentState,
-    request::{Request, RequestType},
+    request::{Append, AppendResponse, Event, Request, Timeout, Vote, VoteResponse},
     volitile_state::VolitileState,
 };
 
 use super::{
     candidate::Candidate,
-    follower::Follower,
-    raft_state::{Handler, RaftState},
+    raft_state::{EventHandler, Handler, RaftState, TimeoutHandler},
 };
 
 pub struct Leader {
@@ -20,7 +17,11 @@ pub struct Leader {
     pub match_index: HashMap<u32, usize>,
 }
 
-impl Leader {}
+impl TimeoutHandler for Leader {
+    fn timeout_length(&self) -> Duration {
+        Duration::from_millis(150)
+    }
+}
 
 impl Leader {
     pub fn send_heartbeat<T: DataType>(
@@ -50,7 +51,7 @@ impl Leader {
             ),
             true => Vec::new(),
         };
-        let data = RequestType::Append {
+        let event = Event::Append(Append {
             prev_log_length: next_index,
             prev_log_term: match next_index > 0 {
                 true => persistent_state.log[next_index - 1].term,
@@ -58,12 +59,12 @@ impl Leader {
             },
             entries,
             leader_commit: volitile_state.commit_index,
-        };
+        });
         Request {
             sender: persistent_state.id,
             reciever: server,
             term: persistent_state.current_term,
-            data,
+            event,
         }
     }
 
@@ -91,17 +92,22 @@ impl Leader {
     }
 }
 
-impl<T: DataType> Handler<T> for Leader {
-    fn append_response(
+impl<T: DataType> Handler<T> for Leader {}
+impl<T: DataType> EventHandler<Vote, T> for Leader {}
+impl<T: DataType> EventHandler<VoteResponse, T> for Leader {}
+impl<T: DataType> EventHandler<Timeout, T> for Leader {}
+impl<T: DataType> EventHandler<Append<T>, T> for Leader {}
+impl<T: DataType> EventHandler<AppendResponse, T> for Leader {
+    fn handle_event(
         &mut self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         sender: u32,
         term: u32,
-        success: bool,
+        event: AppendResponse,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         let next_index = self.next_index[&sender];
-        if success {
+        if event.success {
             self.match_index.insert(sender, next_index);
             self.next_index.insert(sender, next_index + 1);
         } else if next_index > 0 {

@@ -3,7 +3,10 @@ use std::time::{Duration, SystemTime};
 use async_std::channel::Sender;
 
 use crate::data::{
-    data_type::DataType, entry::Entry, persistent_state::PersistentState, request::Request,
+    data_type::DataType,
+    entry::Entry,
+    persistent_state::PersistentState,
+    request::{Append, AppendResponse, Request, Timeout, Vote, VoteResponse},
     volitile_state::VolitileState,
 };
 
@@ -44,106 +47,52 @@ impl From<Candidate> for RaftState {
         RaftState::Candidate(candidate)
     }
 }
-pub trait Handler<T: DataType> {
-    fn append(
+pub trait TimeoutHandler {
+    fn timeout_length(&self) -> Duration;
+}
+
+pub trait EventHandler<EventType, T: DataType> {
+    fn handle_event(
         &mut self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         sender: u32,
         term: u32,
-        prev_log_length: usize,
-        prev_log_term: u32,
-        entries: Vec<Entry<T>>,
-        leader_commit: usize,
+        event: EventType,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         (Vec::default(), None)
     }
+}
 
-    fn append_response(
-        &mut self,
-        volitile_state: &mut VolitileState,
-        persistent_state: &mut PersistentState<T>,
-        sender: u32,
-        term: u32,
-        success: bool,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
-        (Vec::default(), None)
-    }
-
-    fn vote(
-        &mut self,
-        volitile_state: &mut VolitileState,
-        persistent_state: &mut PersistentState<T>,
-        sender: u32,
-        term: u32,
-        log_length: usize,
-        last_log_term: u32,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
-        (Vec::default(), None)
-    }
-
-    fn vote_response(
-        &mut self,
-        volitile_state: &mut VolitileState,
-        persistent_state: &mut PersistentState<T>,
-        sender: u32,
-        term: u32,
-        success: bool,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
-        (Vec::default(), None)
-    }
-
-    fn timeout(
-        &mut self,
-        volitile_state: &mut VolitileState,
-        persistent_state: &mut PersistentState<T>,
-        term: u32,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
-        (Vec::default(), None)
-    }
-
-    fn handle(
+pub trait Handler<T: DataType>:
+    EventHandler<Append<T>, T>
+    + EventHandler<AppendResponse, T>
+    + EventHandler<Timeout, T>
+    + EventHandler<Vote, T>
+    + EventHandler<VoteResponse, T>
+{
+    fn handle_request(
         &mut self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         request: Request<T>,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         let (sender, term) = (request.sender, request.term);
-        match request.data {
-            crate::data::request::RequestType::Append {
-                prev_log_length,
-                prev_log_term,
-                entries,
-                leader_commit,
-            } => self.append(
-                volitile_state,
-                persistent_state,
-                sender,
-                term,
-                prev_log_length,
-                prev_log_term,
-                entries,
-                leader_commit,
-            ),
-            crate::data::request::RequestType::AppendResponse { success } => {
-                self.append_response(volitile_state, persistent_state, sender, term, success)
+        match request.event {
+            crate::data::request::Event::Append(event) => {
+                self.handle_event(volitile_state, persistent_state, sender, term, event)
             }
-            crate::data::request::RequestType::Vote {
-                log_length,
-                last_log_term,
-            } => self.vote(
-                volitile_state,
-                persistent_state,
-                sender,
-                term,
-                log_length,
-                last_log_term,
-            ),
-            crate::data::request::RequestType::VoteResponse { success } => {
-                self.vote_response(volitile_state, persistent_state, sender, term, success)
+            crate::data::request::Event::AppendResponse(event) => {
+                self.handle_event(volitile_state, persistent_state, sender, term, event)
             }
-            crate::data::request::RequestType::Timeout {} => {
-                self.timeout(volitile_state, persistent_state, term)
+            crate::data::request::Event::Vote(event) => {
+                self.handle_event(volitile_state, persistent_state, sender, term, event)
+            }
+            crate::data::request::Event::VoteResponse(event) => {
+                self.handle_event(volitile_state, persistent_state, sender, term, event)
+            }
+            crate::data::request::Event::Timeout(event) => {
+                self.handle_event(volitile_state, persistent_state, sender, term, event)
             }
         }
     }
@@ -156,21 +105,17 @@ pub struct State<T: DataType> {
 }
 
 impl<T: DataType> State<T> {
-    pub fn timeout(&self) -> Duration {
-        Duration::from_millis(1000)
+    pub fn timeout_length(&self) -> Duration {
+        self.raft_state.timeout_length()
     }
 
-    pub fn trigger_timeout(&mut self) -> Vec<Request<T>> {
-        Vec::new()
-    }
-
-    pub fn handle(&mut self, request: Request<T>) -> Vec<Request<T>> {
+    pub fn handle_request(&mut self, request: Request<T>) -> Vec<Request<T>> {
         if request.term > self.persistent_state.current_term {
             self.persistent_state.current_term = request.term;
             self.persistent_state.voted_for = None;
             self.raft_state = RaftState::Follower(Follower::default());
         }
-        let (responses, next) = self.raft_state.handle(
+        let (responses, next) = self.raft_state.handle_request(
             request,
             &mut self.volitile_state,
             &mut self.persistent_state,
@@ -183,18 +128,34 @@ impl<T: DataType> State<T> {
 }
 
 impl RaftState {
-    pub fn handle<T: DataType>(
+    pub fn timeout_length(&self) -> Duration {
+        match self {
+            RaftState::Offline(state) => state.timeout_length(),
+            RaftState::Candidate(state) => state.timeout_length(),
+            RaftState::Leader(state) => state.timeout_length(),
+            RaftState::Follower(state) => state.timeout_length(),
+        }
+    }
+
+    pub fn handle_request<T: DataType>(
         &mut self,
         request: Request<T>,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T>>, Option<Self>) {
-        let handler: Box<&mut dyn Handler<T>> = match self {
-            RaftState::Offline(offline) => Box::new(offline),
-            RaftState::Candidate(candidate) => Box::new(candidate),
-            RaftState::Leader(leader) => Box::new(leader),
-            RaftState::Follower(follower) => Box::new(follower),
-        };
-        handler.handle(volitile_state, persistent_state, request)
+        match self {
+            RaftState::Offline(state) => {
+                state.handle_request(volitile_state, persistent_state, request)
+            }
+            RaftState::Candidate(state) => {
+                state.handle_request(volitile_state, persistent_state, request)
+            }
+            RaftState::Leader(state) => {
+                state.handle_request(volitile_state, persistent_state, request)
+            }
+            RaftState::Follower(state) => {
+                state.handle_request(volitile_state, persistent_state, request)
+            }
+        }
     }
 }
