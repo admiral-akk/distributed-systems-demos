@@ -6,10 +6,6 @@ use async_std::task;
 use server::{client::Client, server::Server, switch::Switch};
 
 mod data;
-mod raft_channel;
-mod raft_request;
-mod raft_server;
-mod raft_socket;
 mod server;
 mod state;
 fn main() {
