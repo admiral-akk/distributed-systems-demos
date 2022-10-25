@@ -58,6 +58,7 @@ impl<T: DataType> EventHandler<Append<T>, T> for Candidate {
         _event: Append<T>,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         if term >= persistent_state.current_term {
+            persistent_state.keep_alive += 1;
             persistent_state.voted_for = Some(sender);
             return (Vec::new(), Some(Follower::default().into()));
         }
@@ -153,6 +154,7 @@ mod tests {
 
         assert!(next.is_none());
         assert!(requests.len() == 2);
+        assert_eq!(persistent_state.keep_alive, 0);
         for request in requests {
             assert!(request.sender == persistent_state.id);
             assert!(request.term == persistent_state.current_term);
@@ -197,6 +199,7 @@ mod tests {
             candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
 
         assert!(next.is_some());
+        assert_eq!(persistent_state.keep_alive, 1);
         if let Some(RaftState::Candidate(Candidate { attempts, votes })) = next {
             assert!(attempts == 0);
             assert!(votes.is_empty());
@@ -250,6 +253,7 @@ mod tests {
 
         assert!(next.is_none());
 
+        assert_eq!(persistent_state.keep_alive, 0);
         assert!(requests.len() == 0);
         assert!(candidate.attempts == 0);
         assert!(candidate.votes.len() == 0);
@@ -284,6 +288,7 @@ mod tests {
 
         assert!(next.is_none());
 
+        assert_eq!(persistent_state.keep_alive, 0);
         assert!(requests.len() == 0);
         assert!(candidate.attempts == 0);
         assert!(candidate.votes.eq(&HashSet::from([0])));
@@ -318,6 +323,7 @@ mod tests {
 
         assert!(next.is_none());
 
+        assert_eq!(persistent_state.keep_alive, 0);
         assert!(requests.len() == 0);
         assert!(candidate.attempts == 0);
         assert!(candidate.votes.eq(&HashSet::from([0])));
@@ -356,6 +362,7 @@ mod tests {
         } else {
             panic!("Didn't become a leader!");
         }
+        assert_eq!(persistent_state.keep_alive, 1);
         assert!(candidate.attempts == 0);
         assert!(candidate.votes.eq(&HashSet::from([0, 2])));
     }
@@ -393,7 +400,7 @@ mod tests {
 
         let (_, next) =
             candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
-
+        assert_eq!(persistent_state.keep_alive, 0);
         assert!(next.is_none());
         assert!(persistent_state.log.iter().eq(log.iter()));
     }
@@ -437,6 +444,7 @@ mod tests {
         } else {
             panic!("Failed to transition to follower");
         }
+        assert_eq!(persistent_state.keep_alive, 1);
         assert!(persistent_state.voted_for == Some(0));
         assert!(persistent_state.log[0..2].iter().eq(log[0..2].iter()));
     }
