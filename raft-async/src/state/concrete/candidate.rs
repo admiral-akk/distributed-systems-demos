@@ -58,6 +58,7 @@ impl<T: DataType> EventHandler<Append<T>, T> for Candidate {
         event: Append<T>,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         if term >= persistent_state.current_term {
+            persistent_state.voted_for = Some(sender);
             return (Vec::new(), Some(Follower::default().into()));
         }
         (Vec::default(), None)
@@ -436,6 +437,7 @@ mod tests {
         } else {
             panic!("Failed to transition to follower");
         }
+        assert!(persistent_state.voted_for == Some(0));
         assert!(persistent_state.log[0..2].iter().eq(log[0..2].iter()));
     }
 }
