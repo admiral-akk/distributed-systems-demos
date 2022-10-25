@@ -172,6 +172,8 @@ mod tests {
 
     use crate::data::entry::Entry;
     use crate::data::persistent_state::Config;
+    use crate::data::request;
+    use crate::state::concrete::leader;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
@@ -210,6 +212,59 @@ mod tests {
         } else {
             panic!("Transitioned to non-leader state!");
         }
+        assert!(requests.len() == 4);
+        for request in requests {
+            assert!(request.sender == persistent_state.id);
+            assert!(request.term == persistent_state.current_term);
+            match request.event {
+                Event::Append(event) => {
+                    assert_eq!(event.prev_log_length, 2);
+                    assert_eq!(event.prev_log_term, 3);
+                    assert_eq!(event.leader_commit, 1);
+                    assert!(event.entries.is_empty());
+                }
+                _ => {
+                    panic!("Non-append event!")
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_timeout() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2, 3, 4]),
+        };
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            current_term: 3,
+            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]),
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState { commit_index: 1 };
+        let request: Request<u32> = Request {
+            sender: 0,
+            reciever: persistent_state.id,
+            term: 0,
+            event: Event::Timeout(request::Timeout),
+        };
+
+        let (_, next) = Leader::from_candidate(
+            &Candidate::default(),
+            &mut volitile_state,
+            &mut persistent_state,
+        );
+
+        let mut leader = match next {
+            Some(RaftState::Leader(leader)) => leader,
+            _ => panic!("Didn't generate leader from candidate!"),
+        };
+
+        let (requests, next) =
+            leader.handle_request(&mut volitile_state, &mut persistent_state, request);
+
+        assert!(next.is_none());
         assert!(requests.len() == 4);
         for request in requests {
             assert!(request.sender == persistent_state.id);
