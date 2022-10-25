@@ -24,7 +24,7 @@ pub struct Client<T: DataType> {
 }
 
 pub enum ClientResponse<T: DataType> {
-    Failed { leader_id: u32, data: T },
+    Failed { leader_id: Option<u32>, data: T },
     Success { data: T },
 }
 

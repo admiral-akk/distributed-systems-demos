@@ -2,6 +2,7 @@ use std::{collections::HashMap, time::Duration};
 
 use crate::data::{
     data_type::DataType,
+    entry::Entry,
     persistent_state::PersistentState,
     request::{
         Append, AppendResponse, Client, ClientResponse, Event, Request, Timeout, Vote, VoteResponse,
@@ -46,12 +47,12 @@ impl Leader {
     ) -> Request<T> {
         let next_index = self.match_index[&server];
         // Append at most 10 elements
-        let entries = match persistent_state.log.is_empty() {
-            false => Vec::from(
+        let entries = match next_index < persistent_state.log.len() {
+            true => Vec::from(
                 &persistent_state.log
-                    [(next_index - 1)..(next_index).min(persistent_state.log.len())],
+                    [(next_index)..(next_index + 1).min(persistent_state.log.len())],
             ),
-            true => Vec::new(),
+            false => Vec::new(),
         };
         let event = Event::Append(Append {
             prev_log_length: next_index,
@@ -96,7 +97,27 @@ impl Leader {
 
 impl<T: DataType> Handler<T> for Leader {}
 impl<T: DataType> EventHandler<Vote, T> for Leader {}
-impl<T: DataType> EventHandler<Client<T>, T> for Leader {}
+impl<T: DataType> EventHandler<Client<T>, T> for Leader {
+    fn handle_event(
+        &mut self,
+        volitile_state: &mut VolitileState,
+        persistent_state: &mut PersistentState<T>,
+        sender: u32,
+        term: u32,
+        event: Client<T>,
+    ) -> (Vec<Request<T>>, Option<RaftState>) {
+        persistent_state.log.push(Entry {
+            term: persistent_state.current_term,
+            data: event.data,
+        });
+        println!(
+            "{} appending entry, index: {}",
+            persistent_state.id,
+            persistent_state.log.len() - 1
+        );
+        (Vec::new(), None)
+    }
+}
 impl<T: DataType> EventHandler<ClientResponse<T>, T> for Leader {}
 impl<T: DataType> EventHandler<VoteResponse, T> for Leader {}
 impl<T: DataType> EventHandler<Timeout, T> for Leader {
@@ -138,6 +159,7 @@ impl<T: DataType> EventHandler<AppendResponse, T> for Leader {
 
         if matching_servers + 1 > persistent_state.quorum() {
             volitile_state.commit_index = next_index.max(volitile_state.commit_index);
+            println!("{} index committed!", next_index);
         }
         (Vec::default(), None)
     }

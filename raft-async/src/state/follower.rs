@@ -53,11 +53,13 @@ impl<T: DataType> EventHandler<Vote, T> for Follower {
         if let Some(voted_for) = persistent_state.voted_for {
             success &= voted_for != sender;
         }
-        if persistent_state.log.len() > 0 {
-            success &= event.log_length + 1 < persistent_state.log.len();
-            success &= event.log_length == persistent_state.log.len()
-                && persistent_state.log[event.log_length].term <= event.last_log_term;
+        // Candidate log is at least as long as follower log
+        success &= event.log_length >= persistent_state.log.len();
+        if event.log_length == persistent_state.log.len() && event.log_length > 0 {
+            // If they match length, then term of last log entry is at least as large
+            success &= persistent_state.log[event.log_length - 1].term <= event.last_log_term;
         }
+
         (
             Vec::from([Request {
                 sender: persistent_state.id,
@@ -135,5 +137,27 @@ impl<T: DataType> EventHandler<Append<T>, T> for Follower {
 
 impl<T: DataType> Handler<T> for Follower {}
 
-impl<T: DataType> EventHandler<Client<T>, T> for Follower {}
+impl<T: DataType> EventHandler<Client<T>, T> for Follower {
+    fn handle_event(
+        &mut self,
+        volitile_state: &mut VolitileState,
+        persistent_state: &mut PersistentState<T>,
+        sender: u32,
+        term: u32,
+        event: Client<T>,
+    ) -> (Vec<Request<T>>, Option<RaftState>) {
+        (
+            Vec::from([Request {
+                sender: persistent_state.id,
+                reciever: sender,
+                term: 0,
+                event: Event::ClientResponse(ClientResponse::Failed {
+                    leader_id: persistent_state.voted_for,
+                    data: event.data,
+                }),
+            }]),
+            None,
+        )
+    }
+}
 impl<T: DataType> EventHandler<ClientResponse<T>, T> for Follower {}

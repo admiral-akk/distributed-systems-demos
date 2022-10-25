@@ -14,7 +14,6 @@ use crate::data::{
 
 use super::{candidate::Candidate, follower::Follower, leader::Leader, offline::Offline};
 
-// Makes all of the states fixed size (since I think the enum pre-allocates space for the largest).
 pub enum RaftState {
     Offline(Offline),
     Candidate(Candidate),

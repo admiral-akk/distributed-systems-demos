@@ -19,7 +19,7 @@ pub struct Offline {}
 // Does nothing. Only request it handles is timeout, which it assumes is a reboot request.
 impl TimeoutHandler for Offline {
     fn timeout_length(&self) -> Duration {
-        Duration::from_millis(4000)
+        Duration::from_millis(1000)
     }
 }
 

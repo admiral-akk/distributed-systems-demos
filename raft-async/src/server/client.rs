@@ -65,16 +65,18 @@ where
                 match request.event {
                     Event::ClientResponse(r) => match r {
                         ClientResponse::Failed { leader_id, data } => {
-                            {
-                                *client.leader_id.lock().await = leader_id;
+                            if let Some(leader_id) = leader_id {
+                                {
+                                    *client.leader_id.lock().await = leader_id;
+                                }
+                                let response = Request {
+                                    sender: client.id,
+                                    reciever: leader_id,
+                                    term: 0,
+                                    event: Event::Client(request::Client { data }),
+                                };
+                                client.output.send(response).await;
                             }
-                            let response = Request {
-                                sender: client.id,
-                                reciever: leader_id,
-                                term: 0,
-                                event: Event::Client(request::Client { data }),
-                            };
-                            client.output.send(response).await;
                         }
                         _ => {}
                     },

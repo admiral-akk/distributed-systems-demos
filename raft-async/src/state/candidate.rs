@@ -21,7 +21,7 @@ pub struct Candidate {
 }
 impl TimeoutHandler for Candidate {
     fn timeout_length(&self) -> Duration {
-        Duration::from_millis(1000)
+        Duration::from_millis(200)
     }
 }
 
@@ -40,7 +40,7 @@ impl<T: DataType> EventHandler<Timeout, T> for Candidate {
         event: Timeout,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         self.attempts += 1;
-        if self.attempts > 3 {
+        if self.attempts > 10 {
             Candidate::call_election(persistent_state)
         } else {
             (Candidate::request_votes(persistent_state), None)
