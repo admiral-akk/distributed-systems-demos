@@ -10,7 +10,7 @@ use crate::{
     state::concrete::follower::Follower,
 };
 
-use super::raft_state::RaftState;
+use super::{concrete::offline::Offline, raft_state::RaftState};
 
 pub struct State<T: DataType> {
     pub persistent_state: PersistentState<T>,
@@ -29,6 +29,11 @@ impl<T: DataType> State<T> {
             raft_state: RaftState::default(),
             volitile_state: VolitileState::default(),
         }
+    }
+
+    pub fn shutdown(&mut self) {
+        println!("Server {} crashed", self.persistent_state.id);
+        self.raft_state = RaftState::Offline(Offline {});
     }
 
     pub fn timeout_length(&self) -> Duration {

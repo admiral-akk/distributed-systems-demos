@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, time::Duration};
 
 use async_std::{
     channel::{Receiver, Sender},
@@ -25,6 +25,8 @@ pub struct Server<T: DataType> {
     pub server_sender: Sender<Request<T>>,
 }
 
+const SERVER_FAILURE: Duration = Duration::from_millis(10000);
+
 impl<T: DataType> Server<T>
 where
     PersistentState<T>: Default,
@@ -45,8 +47,17 @@ where
     }
 
     pub fn init(server: Arc<Server<T>>) {
+        task::spawn(Server::random_shutdown(server.clone()));
         task::spawn(Server::request_loop(server.clone()));
         task::spawn(Server::timeout_loop(server.clone()));
+    }
+
+    async fn random_shutdown(server: Arc<Server<T>>) {
+        loop {
+            let timeout = rand::thread_rng().gen_range((SERVER_FAILURE / 2)..(2 * SERVER_FAILURE));
+            task::sleep(timeout).await;
+            server.state.lock().await.shutdown();
+        }
     }
 
     async fn timeout_loop(server: Arc<Server<T>>) {
