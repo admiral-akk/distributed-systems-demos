@@ -1,86 +1,174 @@
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
+
+use async_std::channel::Sender;
 
 use crate::data::{
-    data_type::DataType, persistent_state::PersistentState, request::Request,
+    data_type::DataType, entry::Entry, persistent_state::PersistentState, request::Request,
     volitile_state::VolitileState,
 };
 
 use super::{candidate::Candidate, follower::Follower, leader::Leader, offline::Offline};
 
-pub struct RaftStateGeneric<StateType> {
-    pub state: StateType,
-}
-
 // Makes all of the states fixed size (since I think the enum pre-allocates space for the largest).
-
-pub enum RaftStateWrapper {
-    Offline(RaftStateGeneric<Offline>),
-    Candidate(RaftStateGeneric<Candidate>),
-    Leader(RaftStateGeneric<Leader>),
-    Follower(RaftStateGeneric<Follower>),
+pub enum RaftState {
+    Offline(Offline),
+    Candidate(Candidate),
+    Leader(Leader),
+    Follower(Follower),
 }
-impl Default for RaftStateWrapper {
+impl Default for RaftState {
     fn default() -> Self {
-        RaftStateWrapper::Offline(RaftStateGeneric { state: Offline {} })
+        RaftState::Offline(Offline {})
     }
 }
 
-impl From<RaftStateGeneric<Leader>> for RaftStateWrapper {
-    fn from(offline: RaftStateGeneric<Leader>) -> Self {
-        RaftStateWrapper::Leader(offline)
+impl From<Leader> for RaftState {
+    fn from(leader: Leader) -> Self {
+        RaftState::Leader(leader)
     }
 }
-impl From<RaftStateGeneric<Offline>> for RaftStateWrapper {
-    fn from(offline: RaftStateGeneric<Offline>) -> Self {
-        RaftStateWrapper::Offline(offline)
-    }
-}
-
-impl From<RaftStateGeneric<Follower>> for RaftStateWrapper {
-    fn from(offline: RaftStateGeneric<Follower>) -> Self {
-        RaftStateWrapper::Follower(offline)
+impl From<Offline> for RaftState {
+    fn from(offline: Offline) -> Self {
+        RaftState::Offline(offline)
     }
 }
 
-impl From<RaftStateGeneric<Candidate>> for RaftStateWrapper {
-    fn from(offline: RaftStateGeneric<Candidate>) -> Self {
-        RaftStateWrapper::Candidate(offline)
+impl From<Follower> for RaftState {
+    fn from(follower: Follower) -> Self {
+        RaftState::Follower(follower)
     }
 }
 
-#[derive(Default)]
+impl From<Candidate> for RaftState {
+    fn from(candidate: Candidate) -> Self {
+        RaftState::Candidate(candidate)
+    }
+}
+pub trait Handler<T: DataType> {
+    fn append(
+        &mut self,
+        volitile_state: &mut VolitileState,
+        persistent_state: &mut PersistentState<T>,
+        sender: u32,
+        term: u32,
+        prev_log_length: usize,
+        prev_log_term: u32,
+        entries: Vec<Entry<T>>,
+        leader_commit: usize,
+    ) -> (Vec<Request<T>>, Option<RaftState>) {
+        (Vec::default(), None)
+    }
+
+    fn append_response(
+        &mut self,
+        volitile_state: &mut VolitileState,
+        persistent_state: &mut PersistentState<T>,
+        sender: u32,
+        term: u32,
+        success: bool,
+    ) -> (Vec<Request<T>>, Option<RaftState>) {
+        (Vec::default(), None)
+    }
+
+    fn vote(
+        &mut self,
+        volitile_state: &mut VolitileState,
+        persistent_state: &mut PersistentState<T>,
+        sender: u32,
+        term: u32,
+        log_length: usize,
+        last_log_term: u32,
+    ) -> (Vec<Request<T>>, Option<RaftState>) {
+        (Vec::default(), None)
+    }
+
+    fn vote_response(
+        &mut self,
+        volitile_state: &mut VolitileState,
+        persistent_state: &mut PersistentState<T>,
+        sender: u32,
+        term: u32,
+        success: bool,
+    ) -> (Vec<Request<T>>, Option<RaftState>) {
+        (Vec::default(), None)
+    }
+
+    fn timeout(
+        &mut self,
+        volitile_state: &mut VolitileState,
+        persistent_state: &mut PersistentState<T>,
+        term: u32,
+    ) -> (Vec<Request<T>>, Option<RaftState>) {
+        (Vec::default(), None)
+    }
+
+    fn handle(
+        &mut self,
+        volitile_state: &mut VolitileState,
+        persistent_state: &mut PersistentState<T>,
+        request: Request<T>,
+    ) -> (Vec<Request<T>>, Option<RaftState>) {
+        let (sender, term) = (request.sender, request.term);
+        match request.data {
+            crate::data::request::RequestType::Append {
+                prev_log_length,
+                prev_log_term,
+                entries,
+                leader_commit,
+            } => self.append(
+                volitile_state,
+                persistent_state,
+                sender,
+                term,
+                prev_log_length,
+                prev_log_term,
+                entries,
+                leader_commit,
+            ),
+            crate::data::request::RequestType::AppendResponse { success } => {
+                self.append_response(volitile_state, persistent_state, sender, term, success)
+            }
+            crate::data::request::RequestType::Vote {
+                log_length,
+                last_log_term,
+            } => self.vote(
+                volitile_state,
+                persistent_state,
+                sender,
+                term,
+                log_length,
+                last_log_term,
+            ),
+            crate::data::request::RequestType::VoteResponse { success } => {
+                self.vote_response(volitile_state, persistent_state, sender, term, success)
+            }
+            crate::data::request::RequestType::Timeout {} => {
+                self.timeout(volitile_state, persistent_state, term)
+            }
+        }
+    }
+}
+
 pub struct State<T: DataType> {
     pub persistent_state: PersistentState<T>,
-    pub raft_state: RaftStateWrapper,
+    pub raft_state: RaftState,
     pub volitile_state: VolitileState,
 }
 
 impl<T: DataType> State<T> {
-    pub fn heartbeat(&mut self) -> Vec<Request<T>> {
-        match &self.raft_state {
-            RaftStateWrapper::Leader(leader) => {
-                leader.send_heartbeat(&mut self.volitile_state, &mut self.persistent_state)
-            }
-            _ => (Vec::new()),
-        }
+    pub fn timeout(&self) -> Duration {
+        Duration::from_millis(1000)
     }
 
-    pub fn check_timeout(&mut self) -> Vec<Request<T>> {
-        let (responses, next) = self
-            .raft_state
-            .check_timeout(&mut self.volitile_state, &mut self.persistent_state);
-        if let Some(next) = next {
-            self.raft_state = next;
-        }
-        responses
+    pub fn trigger_timeout(&mut self) -> Vec<Request<T>> {
+        Vec::new()
     }
 
     pub fn handle(&mut self, request: Request<T>) -> Vec<Request<T>> {
         if request.term > self.persistent_state.current_term {
             self.persistent_state.current_term = request.term;
             self.persistent_state.voted_for = None;
-            self.persistent_state.last_heartbeat = Some(SystemTime::now());
-            self.raft_state = RaftStateWrapper::Follower(RaftStateGeneric::<Follower>::default());
+            self.raft_state = RaftState::Follower(Follower::default());
         }
         let (responses, next) = self.raft_state.handle(
             request,
@@ -94,66 +182,19 @@ impl<T: DataType> State<T> {
     }
 }
 
-pub trait Handler<T: DataType> {
-    fn handle(
-        &mut self,
-        request: Request<T>,
-        volitile_state: &mut VolitileState,
-        persistent_state: &mut PersistentState<T>,
-    ) -> (Vec<Request<T>>, Option<RaftStateWrapper>) {
-        (Vec::default(), None)
-    }
-
-    fn check_timeout(
-        &mut self,
-        volitile_state: &mut VolitileState,
-        persistent_state: &mut PersistentState<T>,
-    ) -> (Vec<Request<T>>, Option<RaftStateWrapper>) {
-        (Vec::default(), None)
-    }
-}
-
-impl RaftStateWrapper {
-    pub fn check_timeout<T: DataType>(
-        &mut self,
-        volitile_state: &mut VolitileState,
-        persistent_state: &mut PersistentState<T>,
-    ) -> (Vec<Request<T>>, Option<Self>) {
-        match self {
-            RaftStateWrapper::Offline(offline) => {
-                offline.check_timeout(volitile_state, persistent_state)
-            }
-            RaftStateWrapper::Candidate(candidate) => {
-                candidate.check_timeout(volitile_state, persistent_state)
-            }
-            RaftStateWrapper::Leader(leader) => {
-                leader.check_timeout(volitile_state, persistent_state)
-            }
-            RaftStateWrapper::Follower(follower) => {
-                follower.check_timeout(volitile_state, persistent_state)
-            }
-        }
-    }
-
+impl RaftState {
     pub fn handle<T: DataType>(
         &mut self,
         request: Request<T>,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T>>, Option<Self>) {
-        match self {
-            RaftStateWrapper::Offline(offline) => {
-                offline.handle(request, volitile_state, persistent_state)
-            }
-            RaftStateWrapper::Candidate(candidate) => {
-                candidate.handle(request, volitile_state, persistent_state)
-            }
-            RaftStateWrapper::Leader(leader) => {
-                leader.handle(request, volitile_state, persistent_state)
-            }
-            RaftStateWrapper::Follower(follower) => {
-                follower.handle(request, volitile_state, persistent_state)
-            }
-        }
+        let handler: Box<&mut dyn Handler<T>> = match self {
+            RaftState::Offline(offline) => Box::new(offline),
+            RaftState::Candidate(candidate) => Box::new(candidate),
+            RaftState::Leader(leader) => Box::new(leader),
+            RaftState::Follower(follower) => Box::new(follower),
+        };
+        handler.handle(volitile_state, persistent_state, request)
     }
 }

@@ -20,7 +20,7 @@ pub struct PersistentState<T: DataType> {
     pub voted_for: Option<u32>,
     pub log: Vec<Entry<T>>,
     pub config: Config,
-    pub last_heartbeat: Option<SystemTime>,
+    pub keep_alive: u32,
 }
 
 impl<T: DataType> PersistentState<T> {
