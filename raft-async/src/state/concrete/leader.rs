@@ -145,10 +145,10 @@ impl<T: DataType> EventHandler<AppendResponse, T> for Leader {
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         let next_index = self.next_index[&sender];
         if event.success {
-            self.match_index.insert(sender, next_index + 1);
             if next_index < persistent_state.log.len() {
                 self.next_index.insert(sender, next_index + 1);
             }
+            self.match_index.insert(sender, self.next_index[&sender]);
         } else if next_index > 0 {
             self.next_index.insert(sender, next_index - 1);
         }
@@ -287,11 +287,11 @@ mod tests {
             log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]),
             ..Default::default()
         };
-        let mut volitile_state = VolitileState { commit_index: 1 };
+        let mut volitile_state = VolitileState { commit_index: 2 };
         let request: Request<u32> = Request {
             sender: 4,
             reciever: persistent_state.id,
-            term: 0,
+            term: 3,
             event: Event::AppendResponse(request::AppendResponse { success: true }),
         };
 
@@ -307,5 +307,39 @@ mod tests {
         assert!(requests.is_empty());
         assert_eq!(leader.next_index[&4], 2);
         assert_eq!(leader.match_index[&4], 2);
+    }
+
+    #[test]
+    fn test_append_response_suceeds_up_to_date() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2, 3, 4]),
+        };
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            current_term: 3,
+            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]),
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState { commit_index: 1 };
+        let request: Request<u32> = Request {
+            sender: 0,
+            reciever: persistent_state.id,
+            term: 3,
+            event: Event::AppendResponse(request::AppendResponse { success: true }),
+        };
+
+        let mut leader = Leader {
+            next_index: HashMap::from([(0, 2), (2, 2), (3, 2), (4, 1)]),
+            match_index: HashMap::from([(0, 0), (2, 0), (3, 0), (4, 0)]),
+        };
+
+        let (requests, next) =
+            leader.handle_request(&mut volitile_state, &mut persistent_state, request);
+
+        assert!(next.is_none());
+        assert!(requests.is_empty());
+        assert_eq!(leader.next_index[&0], 2);
+        assert_eq!(leader.match_index[&0], 2);
     }
 }
