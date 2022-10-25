@@ -63,6 +63,10 @@ impl<T: DataType> EventHandler<Vote, T> for Follower {
             success &= persistent_state.log[event.log_length - 1].term <= event.last_log_term;
         }
 
+        if success {
+            persistent_state.voted_for = Some(sender);
+        }
+
         (
             Vec::from([Request {
                 sender: persistent_state.id,
@@ -489,5 +493,270 @@ mod tests {
         assert!(entries[0..1].iter().eq(persistent_state.log[2..3].iter()));
         assert!(persistent_state.log.len() == 3);
         assert!(volitile_state.commit_index == 3);
+    }
+
+    #[test]
+    fn test_vote_old_term() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2]),
+        };
+        let log = Vec::from([
+            Entry { term: 1, data: 10 },
+            Entry { term: 2, data: 4 },
+            Entry { term: 3, data: 5 },
+            Entry { term: 3, data: 6 },
+        ]);
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            current_term: 4,
+            log: log.clone(),
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState::default();
+        let mut follower = Follower::default();
+        let original_request: Request<u32> = Request {
+            sender: 2,
+            reciever: persistent_state.id,
+            term: 3,
+            event: Event::Vote(request::Vote {
+                log_length: 5,
+                last_log_term: 3,
+            }),
+        };
+
+        let (requests, next) =
+            follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
+
+        assert!(next.is_none());
+        assert!(requests.len() == 1);
+        assert!(persistent_state.current_term == 4);
+        assert!(persistent_state.voted_for == None);
+        for request in requests {
+            assert!(request.sender == persistent_state.id);
+            assert!(request.reciever == 2);
+            assert!(request.term == persistent_state.current_term);
+            match request.event {
+                Event::VoteResponse(event) => {
+                    assert!(!event.success);
+                }
+                _ => {
+                    panic!("Non-vote response!");
+                }
+            }
+        }
+        assert!(persistent_state.log.iter().eq(log.iter()));
+    }
+
+    #[test]
+    fn test_vote_shorter_log_larger_last_term() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2]),
+        };
+        let log = Vec::from([
+            Entry { term: 1, data: 10 },
+            Entry { term: 2, data: 4 },
+            Entry { term: 3, data: 5 },
+            Entry { term: 3, data: 6 },
+        ]);
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            current_term: 4,
+            log: log.clone(),
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState::default();
+        let mut follower = Follower::default();
+        let original_request: Request<u32> = Request {
+            sender: 2,
+            reciever: persistent_state.id,
+            term: 4,
+            event: Event::Vote(request::Vote {
+                log_length: 3,
+                last_log_term: 4,
+            }),
+        };
+
+        let (requests, next) =
+            follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
+
+        assert!(next.is_none());
+        assert!(requests.len() == 1);
+        assert!(persistent_state.current_term == 4);
+        assert!(persistent_state.voted_for == None);
+        for request in requests {
+            assert!(request.sender == persistent_state.id);
+            assert!(request.reciever == 2);
+            assert!(request.term == persistent_state.current_term);
+            match request.event {
+                Event::VoteResponse(event) => {
+                    assert!(!event.success);
+                }
+                _ => {
+                    panic!("Non-vote response!");
+                }
+            }
+        }
+        assert!(persistent_state.log.iter().eq(log.iter()));
+    }
+
+    #[test]
+    fn test_vote_same_log_length_older_term() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2]),
+        };
+        let log = Vec::from([
+            Entry { term: 1, data: 10 },
+            Entry { term: 2, data: 4 },
+            Entry { term: 3, data: 5 },
+            Entry { term: 3, data: 6 },
+        ]);
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            current_term: 4,
+            log: log.clone(),
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState::default();
+        let mut follower = Follower::default();
+        let original_request: Request<u32> = Request {
+            sender: 2,
+            reciever: persistent_state.id,
+            term: 4,
+            event: Event::Vote(request::Vote {
+                log_length: 4,
+                last_log_term: 2,
+            }),
+        };
+
+        let (requests, next) =
+            follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
+
+        assert!(next.is_none());
+        assert!(requests.len() == 1);
+        assert!(persistent_state.current_term == 4);
+        assert!(persistent_state.voted_for == None);
+        for request in requests {
+            assert!(request.sender == persistent_state.id);
+            assert!(request.reciever == 2);
+            assert!(request.term == persistent_state.current_term);
+            match request.event {
+                Event::VoteResponse(event) => {
+                    assert!(!event.success);
+                }
+                _ => {
+                    panic!("Non-vote response!");
+                }
+            }
+        }
+        assert!(persistent_state.log.iter().eq(log.iter()));
+    }
+
+    #[test]
+    fn test_vote_same_log_length_same_term() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2]),
+        };
+        let log = Vec::from([
+            Entry { term: 1, data: 10 },
+            Entry { term: 2, data: 4 },
+            Entry { term: 3, data: 5 },
+            Entry { term: 3, data: 6 },
+        ]);
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            current_term: 4,
+            log: log.clone(),
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState::default();
+        let mut follower = Follower::default();
+        let original_request: Request<u32> = Request {
+            sender: 2,
+            reciever: persistent_state.id,
+            term: 4,
+            event: Event::Vote(request::Vote {
+                log_length: 4,
+                last_log_term: 3,
+            }),
+        };
+
+        let (requests, next) =
+            follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
+
+        assert!(next.is_none());
+        assert!(requests.len() == 1);
+        assert!(persistent_state.current_term == 4);
+        assert!(persistent_state.voted_for == Some(2));
+        for request in requests {
+            assert!(request.sender == persistent_state.id);
+            assert!(request.reciever == 2);
+            assert!(request.term == persistent_state.current_term);
+            match request.event {
+                Event::VoteResponse(event) => {
+                    assert!(event.success);
+                }
+                _ => {
+                    panic!("Non-vote response!");
+                }
+            }
+        }
+        assert!(persistent_state.log.iter().eq(log.iter()));
+    }
+
+    #[test]
+    fn test_vote_longer_log_length_older_term() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2]),
+        };
+        let log = Vec::from([
+            Entry { term: 1, data: 10 },
+            Entry { term: 2, data: 4 },
+            Entry { term: 3, data: 5 },
+            Entry { term: 3, data: 6 },
+        ]);
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            current_term: 4,
+            log: log.clone(),
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState::default();
+        let mut follower = Follower::default();
+        let original_request: Request<u32> = Request {
+            sender: 2,
+            reciever: persistent_state.id,
+            term: 4,
+            event: Event::Vote(request::Vote {
+                log_length: 5,
+                last_log_term: 2,
+            }),
+        };
+
+        let (requests, next) =
+            follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
+
+        assert!(next.is_none());
+        assert!(requests.len() == 1);
+        assert!(persistent_state.current_term == 4);
+        assert!(persistent_state.voted_for == Some(2));
+        for request in requests {
+            assert!(request.sender == persistent_state.id);
+            assert!(request.reciever == 2);
+            assert!(request.term == persistent_state.current_term);
+            match request.event {
+                Event::VoteResponse(event) => {
+                    assert!(event.success);
+                }
+                _ => {
+                    panic!("Non-vote response!");
+                }
+            }
+        }
+        assert!(persistent_state.log.iter().eq(log.iter()));
     }
 }
