@@ -5,7 +5,7 @@ use crate::{
         data_type::DataType,
         persistent_state::PersistentState,
         request::{
-            Append, AppendResponse, Client, ClientResponse, Event, Request, Timeout, Vote,
+            self, Append, AppendResponse, Client, ClientResponse, Event, Request, Timeout, Vote,
             VoteResponse,
         },
         volitile_state::VolitileState,
@@ -28,14 +28,14 @@ impl TimeoutHandler for Follower {
 }
 
 impl<T: DataType> EventHandler<AppendResponse, T> for Follower {}
-impl<T: DataType> EventHandler<Timeout, T> for Follower {
+impl<T: DataType> EventHandler<request::Timeout, T> for Follower {
     fn handle_event(
         &mut self,
         _volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         _sender: u32,
         _term: u32,
-        _event: Timeout,
+        _event: request::Timeout,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         Candidate::call_election(persistent_state)
     }
@@ -164,3 +164,62 @@ impl<T: DataType> EventHandler<Client<T>, T> for Follower {
     }
 }
 impl<T: DataType> EventHandler<ClientResponse<T>, T> for Follower {}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use crate::data::persistent_state::Config;
+    use crate::data::request;
+    use crate::state::concrete::follower::Follower;
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+
+    #[test]
+    fn test_timeout() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2]),
+        };
+
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState::default();
+        let mut follower = Follower::default();
+
+        let term = persistent_state.current_term;
+
+        let request: Request<u32> = Request {
+            sender: 10,
+            reciever: persistent_state.id,
+            term: 0,
+            event: Event::Timeout(request::Timeout),
+        };
+
+        let (requests, next) =
+            follower.handle_request(&mut volitile_state, &mut persistent_state, request);
+
+        assert!(next.is_some());
+        if let Some(RaftState::Candidate(_)) = next {
+            assert!(persistent_state.current_term == term + 1);
+        } else {
+            panic!("Didn't transition to candidate!");
+        }
+        assert!(requests.len() == 2);
+        for request in requests {
+            assert!(request.sender == persistent_state.id);
+            assert!(request.term == persistent_state.current_term);
+            match request.event {
+                Event::Vote(event) => {
+                    assert!(event.last_log_term == 0);
+                    assert!(event.log_length == 0);
+                }
+                _ => {
+                    panic!("Non-vote event!")
+                }
+            }
+        }
+    }
+}
