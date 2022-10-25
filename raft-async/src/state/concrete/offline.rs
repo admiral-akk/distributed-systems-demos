@@ -78,7 +78,6 @@ mod tests {
         };
         let mut volitile_state = VolitileState::default();
         let mut follower = Offline {};
-        let term = persistent_state.current_term;
         let request: Request<u32> = Request {
             sender: 10,
             reciever: persistent_state.id,

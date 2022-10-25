@@ -78,6 +78,7 @@ impl Leader {
         persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         persistent_state.current_term += 1;
+        persistent_state.keep_alive += 1;
         println!("{} elected leader!", persistent_state.id);
         let leader = Leader {
             next_index: persistent_state
@@ -211,6 +212,7 @@ mod tests {
         } else {
             panic!("Transitioned to non-leader state!");
         }
+        assert_eq!(persistent_state.keep_alive, 1);
         assert!(requests.len() == 4);
         for request in requests {
             assert!(request.sender == persistent_state.id);
@@ -256,6 +258,7 @@ mod tests {
         let (requests, next) =
             leader.handle_request(&mut volitile_state, &mut persistent_state, request);
 
+        assert_eq!(persistent_state.keep_alive, 0);
         assert!(next.is_none());
         assert!(requests.len() == 4);
         for request in requests {
@@ -303,6 +306,7 @@ mod tests {
         let (requests, next) =
             leader.handle_request(&mut volitile_state, &mut persistent_state, request);
 
+        assert_eq!(persistent_state.keep_alive, 0);
         assert!(next.is_none());
         assert!(requests.is_empty());
         assert_eq!(leader.next_index[&4], 2);
@@ -337,6 +341,7 @@ mod tests {
         let (requests, next) =
             leader.handle_request(&mut volitile_state, &mut persistent_state, request);
 
+        assert_eq!(persistent_state.keep_alive, 0);
         assert!(next.is_none());
         assert!(requests.is_empty());
         assert_eq!(leader.next_index[&0], 2);
@@ -371,6 +376,7 @@ mod tests {
         let (requests, next) =
             leader.handle_request(&mut volitile_state, &mut persistent_state, request);
 
+        assert_eq!(persistent_state.keep_alive, 0);
         assert!(next.is_none());
         assert!(requests.is_empty());
         assert_eq!(leader.next_index[&0], 1);
@@ -406,6 +412,7 @@ mod tests {
         let (requests, next) =
             leader.handle_request(&mut volitile_state, &mut persistent_state, request);
 
+        assert_eq!(persistent_state.keep_alive, 0);
         assert!(next.is_none());
         assert!(requests.is_empty());
         assert_eq!(volitile_state.commit_index, 1);
