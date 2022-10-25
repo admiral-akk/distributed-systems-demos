@@ -376,4 +376,41 @@ mod tests {
         assert_eq!(leader.next_index[&0], 1);
         assert_eq!(leader.match_index[&0], 0);
     }
+
+    #[test]
+    fn test_client_request() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2, 3, 4]),
+        };
+        let log = Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]);
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            current_term: 3,
+            log: log.clone(),
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState { commit_index: 1 };
+        let request: Request<u32> = Request {
+            sender: 0,
+            reciever: persistent_state.id,
+            term: 0,
+            event: Event::Client(request::Client { data: 2 }),
+        };
+
+        let mut leader = Leader {
+            next_index: HashMap::from([(0, 2), (2, 2), (3, 2), (4, 1)]),
+            match_index: HashMap::from([(0, 0), (2, 0), (3, 0), (4, 0)]),
+        };
+
+        let (requests, next) =
+            leader.handle_request(&mut volitile_state, &mut persistent_state, request);
+
+        assert!(next.is_none());
+        assert!(requests.is_empty());
+        assert_eq!(volitile_state.commit_index, 1);
+        assert_eq!(persistent_state.log.len(), 3);
+        assert!(log.iter().eq(persistent_state.log[0..2].iter()));
+        assert!(Entry { term: 3, data: 2 }.eq(&persistent_state.log[2]));
+    }
 }
