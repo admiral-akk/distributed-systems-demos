@@ -17,7 +17,6 @@ use super::{
 #[derive(Default)]
 pub struct Follower {}
 
-const FOLLOWER_TIMEOUT: u128 = 2000;
 impl TimeoutHandler for Follower {
     fn timeout_length(&self) -> Duration {
         Duration::from_millis(1000)

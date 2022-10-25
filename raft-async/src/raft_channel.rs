@@ -1,10 +1,6 @@
 use std::{collections::HashMap, time::Duration};
 
-use async_std::{
-    channel::{Sender},
-    sync::Arc,
-    task,
-};
+use async_std::{channel::Sender, sync::Arc, task};
 use rand::Rng;
 use std::fmt::Debug;
 
