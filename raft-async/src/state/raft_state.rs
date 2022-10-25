@@ -1,10 +1,9 @@
-use std::time::{Duration, SystemTime};
+use std::time::{Duration};
 
-use async_std::channel::Sender;
+
 
 use crate::data::{
     data_type::DataType,
-    entry::Entry,
     persistent_state::PersistentState,
     request::{
         Append, AppendResponse, Client, ClientResponse, Event, Request, Timeout, Vote, VoteResponse,
@@ -55,11 +54,11 @@ pub trait TimeoutHandler {
 pub trait EventHandler<EventType, T: DataType> {
     fn handle_event(
         &mut self,
-        volitile_state: &mut VolitileState,
-        persistent_state: &mut PersistentState<T>,
-        sender: u32,
-        term: u32,
-        event: EventType,
+        _volitile_state: &mut VolitileState,
+        _persistent_state: &mut PersistentState<T>,
+        _sender: u32,
+        _term: u32,
+        _event: EventType,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         (Vec::default(), None)
     }

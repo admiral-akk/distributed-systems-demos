@@ -28,11 +28,11 @@ impl<T: DataType> EventHandler<AppendResponse, T> for Follower {}
 impl<T: DataType> EventHandler<Timeout, T> for Follower {
     fn handle_event(
         &mut self,
-        volitile_state: &mut VolitileState,
+        _volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-        sender: u32,
-        term: u32,
-        event: Timeout,
+        _sender: u32,
+        _term: u32,
+        _event: Timeout,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         Candidate::call_election(persistent_state)
     }
@@ -41,7 +41,7 @@ impl<T: DataType> EventHandler<VoteResponse, T> for Follower {}
 impl<T: DataType> EventHandler<Vote, T> for Follower {
     fn handle_event(
         &mut self,
-        volitile_state: &mut VolitileState,
+        _volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         sender: u32,
         term: u32,
@@ -140,10 +140,10 @@ impl<T: DataType> Handler<T> for Follower {}
 impl<T: DataType> EventHandler<Client<T>, T> for Follower {
     fn handle_event(
         &mut self,
-        volitile_state: &mut VolitileState,
+        _volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         sender: u32,
-        term: u32,
+        _term: u32,
         event: Client<T>,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         (

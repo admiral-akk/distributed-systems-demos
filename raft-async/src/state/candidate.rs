@@ -33,11 +33,11 @@ impl<T: DataType> EventHandler<AppendResponse, T> for Candidate {}
 impl<T: DataType> EventHandler<Timeout, T> for Candidate {
     fn handle_event(
         &mut self,
-        volitile_state: &mut VolitileState,
+        _volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-        sender: u32,
-        term: u32,
-        event: Timeout,
+        _sender: u32,
+        _term: u32,
+        _event: Timeout,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         self.attempts += 1;
         if self.attempts > 10 {
@@ -51,11 +51,11 @@ impl<T: DataType> EventHandler<Timeout, T> for Candidate {
 impl<T: DataType> EventHandler<Append<T>, T> for Candidate {
     fn handle_event(
         &mut self,
-        volitile_state: &mut VolitileState,
+        _volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-        sender: u32,
+        _sender: u32,
         term: u32,
-        event: Append<T>,
+        _event: Append<T>,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         if term >= persistent_state.current_term {
             return (Vec::default(), Some(Follower::default().into()));
@@ -69,7 +69,7 @@ impl<T: DataType> EventHandler<VoteResponse, T> for Candidate {
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         sender: u32,
-        term: u32,
+        _term: u32,
         event: VoteResponse,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         if event.success {

@@ -36,11 +36,11 @@ impl<T: DataType> EventHandler<VoteResponse, T> for Offline {}
 impl<T: DataType> EventHandler<Timeout, T> for Offline {
     fn handle_event(
         &mut self,
-        volitile_state: &mut VolitileState,
-        persistent_state: &mut PersistentState<T>,
-        sender: u32,
-        term: u32,
-        event: Timeout,
+        _volitile_state: &mut VolitileState,
+        _persistent_state: &mut PersistentState<T>,
+        _sender: u32,
+        _term: u32,
+        _event: Timeout,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         (Vec::new(), Some(Follower::default().into()))
     }

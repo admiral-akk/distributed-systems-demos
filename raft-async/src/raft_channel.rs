@@ -1,7 +1,7 @@
 use std::{collections::HashMap, time::Duration};
 
 use async_std::{
-    channel::{SendError, Sender},
+    channel::{Sender},
     sync::Arc,
     task,
 };

@@ -72,7 +72,7 @@ impl Leader {
     }
 
     pub fn from_candidate<T: DataType>(
-        candidate: &Candidate,
+        _candidate: &Candidate,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
@@ -100,10 +100,10 @@ impl<T: DataType> EventHandler<Vote, T> for Leader {}
 impl<T: DataType> EventHandler<Client<T>, T> for Leader {
     fn handle_event(
         &mut self,
-        volitile_state: &mut VolitileState,
+        _volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-        sender: u32,
-        term: u32,
+        _sender: u32,
+        _term: u32,
         event: Client<T>,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         persistent_state.log.push(Entry {
@@ -125,9 +125,9 @@ impl<T: DataType> EventHandler<Timeout, T> for Leader {
         &mut self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-        sender: u32,
-        term: u32,
-        event: Timeout,
+        _sender: u32,
+        _term: u32,
+        _event: Timeout,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         (self.send_heartbeat(volitile_state, persistent_state), None)
     }
@@ -139,7 +139,7 @@ impl<T: DataType> EventHandler<AppendResponse, T> for Leader {
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         sender: u32,
-        term: u32,
+        _term: u32,
         event: AppendResponse,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         let next_index = self.next_index[&sender];
