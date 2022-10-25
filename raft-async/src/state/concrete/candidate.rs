@@ -51,14 +51,21 @@ impl<T: DataType> EventHandler<Timeout, T> for Candidate {
 impl<T: DataType> EventHandler<Append<T>, T> for Candidate {
     fn handle_event(
         &mut self,
-        _volitile_state: &mut VolitileState,
+        volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-        _sender: u32,
+        sender: u32,
         term: u32,
-        _event: Append<T>,
+        event: Append<T>,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         if term >= persistent_state.current_term {
-            return (Vec::default(), Some(Follower::default().into()));
+            let mut follower = Follower::default();
+            let (requests, next) =
+                follower.handle_event(volitile_state, persistent_state, sender, term, event);
+            if let Some(next) = next {
+                return (requests, Some(next));
+            } else {
+                return (requests, Some(follower.into()));
+            }
         }
         (Vec::default(), None)
     }
@@ -76,7 +83,7 @@ impl<T: DataType> EventHandler<VoteResponse, T> for Candidate {
             println!("{} voted for {}", sender, persistent_state.id);
             self.votes.insert(sender);
         }
-        if self.votes.len() > persistent_state.quorum() {
+        if self.votes.len() + 1 >= persistent_state.quorum() {
             return Leader::from_candidate(&self, volitile_state, persistent_state);
         }
         (Vec::default(), None)
@@ -171,7 +178,7 @@ mod tests {
     #[test]
     fn test_timeout_many_iterations() {
         let config = Config {
-            servers: HashSet::from([0, 1, 2]),
+            servers: HashSet::from([0, 1, 2, 3, 4]),
         };
         let mut persistent_state: PersistentState<u32> = PersistentState {
             config,
@@ -204,7 +211,7 @@ mod tests {
             panic!("Transitioned to non-candidate!");
         }
 
-        assert!(requests.len() == 2);
+        assert!(requests.len() == 4);
         for request in requests {
             assert!(request.sender == persistent_state.id);
             assert!(request.term == persistent_state.current_term);
@@ -218,5 +225,224 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_request_vote_rejection() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2, 3, 4]),
+        };
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            current_term: 3,
+            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]),
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState::default();
+        let mut candidate = Candidate {
+            attempts: 0,
+            ..Default::default()
+        };
+        let request: Request<u32> = Request {
+            sender: 0,
+            reciever: persistent_state.id,
+            term: 0,
+            event: Event::VoteResponse(request::VoteResponse { success: false }),
+        };
+
+        let (requests, next) =
+            candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
+
+        assert!(next.is_none());
+
+        assert!(requests.len() == 0);
+        assert!(candidate.attempts == 0);
+        assert!(candidate.votes.len() == 0);
+    }
+
+    #[test]
+    fn test_request_vote_successful() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2, 3, 4]),
+        };
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            current_term: 3,
+            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]),
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState::default();
+        let mut candidate = Candidate {
+            attempts: 0,
+            ..Default::default()
+        };
+        let request: Request<u32> = Request {
+            sender: 0,
+            reciever: persistent_state.id,
+            term: 0,
+            event: Event::VoteResponse(request::VoteResponse { success: true }),
+        };
+
+        let (requests, next) =
+            candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
+
+        assert!(next.is_none());
+
+        assert!(requests.len() == 0);
+        assert!(candidate.attempts == 0);
+        assert!(candidate.votes.eq(&HashSet::from([0])));
+    }
+
+    #[test]
+    fn test_request_vote_successful_redundant() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2, 3, 4]),
+        };
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            current_term: 3,
+            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]),
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState::default();
+        let mut candidate = Candidate {
+            attempts: 0,
+            votes: HashSet::from([0]),
+        };
+        let request: Request<u32> = Request {
+            sender: 0,
+            reciever: persistent_state.id,
+            term: 0,
+            event: Event::VoteResponse(request::VoteResponse { success: true }),
+        };
+
+        let (requests, next) =
+            candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
+
+        assert!(next.is_none());
+
+        assert!(requests.len() == 0);
+        assert!(candidate.attempts == 0);
+        assert!(candidate.votes.eq(&HashSet::from([0])));
+    }
+
+    #[test]
+    fn test_request_vote_successful_elected() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2, 3, 4]),
+        };
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            current_term: 3,
+            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]),
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState::default();
+        let mut candidate = Candidate {
+            attempts: 0,
+            votes: HashSet::from([0]),
+        };
+        let request: Request<u32> = Request {
+            sender: 2,
+            reciever: persistent_state.id,
+            term: 0,
+            event: Event::VoteResponse(request::VoteResponse { success: true }),
+        };
+
+        let (_, next) =
+            candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
+
+        assert!(next.is_some());
+        // We can verify the elected Leader values in the leader tests.
+        if let Some(RaftState::Leader(Leader { .. })) = next {
+        } else {
+            panic!("Didn't become a leader!");
+        }
+        assert!(candidate.attempts == 0);
+        assert!(candidate.votes.eq(&HashSet::from([0, 2])));
+    }
+
+    #[test]
+    fn test_append_old_leader() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2, 3, 4]),
+        };
+        let log = Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]);
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            current_term: 4,
+            log: log.clone(),
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState::default();
+        let mut candidate = Candidate {
+            attempts: 0,
+            votes: HashSet::from([0]),
+        };
+        let entries = Vec::from([Entry { term: 4, data: 5 }]);
+        let request: Request<u32> = Request {
+            sender: 0,
+            reciever: persistent_state.id,
+            term: 3,
+            event: Event::Append(request::Append {
+                prev_log_length: 2,
+                prev_log_term: 3,
+                entries: entries.clone(),
+                leader_commit: 12,
+            }),
+        };
+
+        let (_, next) =
+            candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
+
+        assert!(next.is_none());
+        assert!(persistent_state.log.iter().eq(log.iter()));
+    }
+
+    #[test]
+    fn test_append_current_leader() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2, 3, 4]),
+        };
+        let log = Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]);
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            current_term: 4,
+            log: log.clone(),
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState::default();
+        let mut candidate = Candidate {
+            attempts: 0,
+            votes: HashSet::from([0]),
+        };
+        let entries = Vec::from([Entry { term: 4, data: 5 }]);
+        let request: Request<u32> = Request {
+            sender: 0,
+            reciever: persistent_state.id,
+            term: 4,
+            event: Event::Append(request::Append {
+                prev_log_length: 2,
+                prev_log_term: 3,
+                entries: entries.clone(),
+                leader_commit: 12,
+            }),
+        };
+
+        let (_, next) =
+            candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
+
+        assert!(next.is_some());
+        if let Some(RaftState::Follower(_)) = next {
+        } else {
+            panic!("Failed to transition to follower");
+        }
+        assert!(persistent_state.log[0..2].iter().eq(log[0..2].iter()));
     }
 }
