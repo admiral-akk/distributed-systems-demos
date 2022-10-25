@@ -1,19 +1,21 @@
 use std::time::Duration;
 
-use crate::data::{
-    data_type::DataType,
-    persistent_state::PersistentState,
-    request::{
-        Append, AppendResponse, Client, ClientResponse, Request, Timeout, Vote, VoteResponse,
+use crate::{
+    data::{
+        data_type::DataType,
+        persistent_state::PersistentState,
+        request::{
+            Append, AppendResponse, Client, ClientResponse, Request, Timeout, Vote, VoteResponse,
+        },
+        volitile_state::VolitileState,
     },
-    volitile_state::VolitileState,
+    state::{
+        handler::{EventHandler, Handler, TimeoutHandler},
+        raft_state::RaftState,
+    },
 };
 
-use super::{
-    follower::Follower,
-    handler::{EventHandler, Handler, TimeoutHandler},
-    raft_state::RaftState,
-};
+use super::follower::Follower;
 
 pub struct Offline {}
 

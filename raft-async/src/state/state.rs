@@ -7,7 +7,7 @@ use crate::{
         request::Request,
         volitile_state::VolitileState,
     },
-    state::follower::Follower,
+    state::concrete::follower::Follower,
 };
 
 use super::raft_state::RaftState;

@@ -9,12 +9,12 @@ use crate::data::{
     },
     volitile_state::VolitileState,
 };
-
-use super::{
-    candidate::Candidate,
+use crate::state::{
     handler::{EventHandler, Handler, TimeoutHandler},
     raft_state::RaftState,
 };
+
+use super::candidate::Candidate;
 
 pub struct Leader {
     pub next_index: HashMap<u32, usize>,

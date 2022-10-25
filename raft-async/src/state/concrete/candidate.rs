@@ -1,11 +1,6 @@
 use std::{collections::HashSet, time::Duration};
 
-use super::{
-    follower::Follower,
-    handler::{EventHandler, Handler, TimeoutHandler},
-    leader::Leader,
-    raft_state::RaftState,
-};
+use super::{follower::Follower, leader::Leader};
 use crate::data::{
     data_type::DataType,
     persistent_state::PersistentState,
@@ -13,6 +8,10 @@ use crate::data::{
         Append, AppendResponse, Client, ClientResponse, Event, Request, Timeout, Vote, VoteResponse,
     },
     volitile_state::VolitileState,
+};
+use crate::state::{
+    handler::{EventHandler, Handler, TimeoutHandler},
+    raft_state::RaftState,
 };
 
 #[derive(Default)]

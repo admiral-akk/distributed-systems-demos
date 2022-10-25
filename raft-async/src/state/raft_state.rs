@@ -6,11 +6,8 @@ use crate::data::{
 };
 
 use super::{
-    candidate::Candidate,
-    follower::Follower,
+    concrete::{candidate::Candidate, follower::Follower, leader::Leader, offline::Offline},
     handler::{Handler, TimeoutHandler},
-    leader::Leader,
-    offline::Offline,
 };
 pub enum RaftState {
     Offline(Offline),
