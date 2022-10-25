@@ -58,14 +58,7 @@ impl<T: DataType> EventHandler<Append<T>, T> for Candidate {
         event: Append<T>,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         if term >= persistent_state.current_term {
-            let mut follower = Follower::default();
-            let (requests, next) =
-                follower.handle_event(volitile_state, persistent_state, sender, term, event);
-            if let Some(next) = next {
-                return (requests, Some(next));
-            } else {
-                return (requests, Some(follower.into()));
-            }
+            return (Vec::new(), Some(Follower::default().into()));
         }
         (Vec::default(), None)
     }
