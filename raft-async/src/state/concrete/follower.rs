@@ -430,4 +430,64 @@ mod tests {
         assert!(entries[0..1].iter().eq(persistent_state.log[2..3].iter()));
         assert!(volitile_state.commit_index == 2);
     }
+
+    #[test]
+    fn test_append_log_overwrite() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2]),
+        };
+        let log = Vec::from([
+            Entry { term: 1, data: 10 },
+            Entry { term: 2, data: 4 },
+            Entry { term: 3, data: 5 },
+            Entry { term: 3, data: 6 },
+        ]);
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            current_term: 4,
+            log: log.clone(),
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState::default();
+        let mut follower = Follower::default();
+        let entries = Vec::from([Entry { term: 4, data: 5 }]);
+        let original_request: Request<u32> = Request {
+            sender: 0,
+            reciever: persistent_state.id,
+            term: 4,
+            event: Event::Append(request::Append {
+                prev_log_length: 2,
+                prev_log_term: 2,
+                entries: entries.clone(),
+                leader_commit: 12,
+            }),
+        };
+
+        let (requests, next) =
+            follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
+
+        assert!(next.is_none());
+        assert!(requests.len() == 1);
+        assert!(persistent_state.current_term == 4);
+        assert!(persistent_state.voted_for == Some(0));
+        for request in requests {
+            assert!(request.sender == persistent_state.id);
+            assert!(request.reciever == 0);
+            assert!(request.term == persistent_state.current_term);
+            match request.event {
+                Event::AppendResponse(event) => {
+                    assert!(event.success);
+                }
+                _ => {
+                    panic!("Non-append response!");
+                }
+            }
+        }
+
+        assert!(log[0..2].iter().eq(persistent_state.log[0..2].iter()));
+        assert!(entries[0..1].iter().eq(persistent_state.log[2..3].iter()));
+        assert!(persistent_state.log.len() == 3);
+        assert!(volitile_state.commit_index == 3);
+    }
 }
