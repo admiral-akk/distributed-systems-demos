@@ -28,14 +28,14 @@ impl TimeoutHandler for Follower {
 }
 
 impl<T: DataType> EventHandler<AppendResponse, T> for Follower {}
-impl<T: DataType> EventHandler<request::Timeout, T> for Follower {
+impl<T: DataType> EventHandler<Timeout, T> for Follower {
     fn handle_event(
         &mut self,
         _volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         _sender: u32,
         _term: u32,
-        _event: request::Timeout,
+        _event: Timeout,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         Candidate::call_election(persistent_state)
     }
@@ -169,6 +169,7 @@ impl<T: DataType> EventHandler<ClientResponse<T>, T> for Follower {}
 mod tests {
     use std::collections::HashSet;
 
+    use crate::data::entry::Entry;
     use crate::data::persistent_state::Config;
     use crate::data::request;
     use crate::state::concrete::follower::Follower;
@@ -180,17 +181,16 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2]),
         };
-
         let mut persistent_state: PersistentState<u32> = PersistentState {
             config,
             id: 1,
+            current_term: 3,
+            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 2, data: 4 }]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
         let mut follower = Follower::default();
-
         let term = persistent_state.current_term;
-
         let request: Request<u32> = Request {
             sender: 10,
             reciever: persistent_state.id,
@@ -213,11 +213,63 @@ mod tests {
             assert!(request.term == persistent_state.current_term);
             match request.event {
                 Event::Vote(event) => {
-                    assert!(event.last_log_term == 0);
-                    assert!(event.log_length == 0);
+                    assert!(event.last_log_term == 2);
+                    assert!(event.log_length == 2);
                 }
                 _ => {
                     panic!("Non-vote event!")
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_append_old_leader() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2]),
+        };
+        let log = Vec::from([Entry { term: 1, data: 10 }, Entry { term: 2, data: 4 }]);
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            current_term: 6,
+            log: log.clone(),
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState::default();
+        let mut follower = Follower::default();
+        let original_request: Request<u32> = Request {
+            sender: 0,
+            reciever: persistent_state.id,
+            term: 4,
+            event: Event::Append(request::Append {
+                prev_log_length: log.len(),
+                prev_log_term: 2,
+                entries: Vec::from([Entry { term: 3, data: 5 }]),
+                leader_commit: 2,
+            }),
+        };
+
+        let (requests, next) =
+            follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
+
+        assert!(next.is_none());
+        assert!(requests.len() == 1);
+        assert!(persistent_state.current_term == 6);
+        assert!(
+            persistent_state.voted_for == None,
+            "Follower should not redirect to this leader."
+        );
+        for request in requests {
+            assert!(request.sender == persistent_state.id);
+            assert!(request.reciever == 0);
+            assert!(request.term == persistent_state.current_term);
+            match request.event {
+                Event::AppendResponse(event) => {
+                    assert!(!event.success);
+                }
+                _ => {
+                    panic!("Non-append response!");
                 }
             }
         }
