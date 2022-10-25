@@ -112,3 +112,111 @@ impl Candidate {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use crate::data::entry::Entry;
+    use crate::data::persistent_state::Config;
+    use crate::data::request;
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+
+    #[test]
+    fn test_timeout_few_iterations() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2]),
+        };
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            current_term: 3,
+            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]),
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState::default();
+        let mut candidate = Candidate {
+            attempts: 0,
+            ..Default::default()
+        };
+        let request: Request<u32> = Request {
+            sender: 0,
+            reciever: persistent_state.id,
+            term: 0,
+            event: Event::Timeout(request::Timeout),
+        };
+
+        let (requests, next) =
+            candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
+
+        assert!(next.is_none());
+        assert!(requests.len() == 2);
+        for request in requests {
+            assert!(request.sender == persistent_state.id);
+            assert!(request.term == persistent_state.current_term);
+            match request.event {
+                Event::Vote(event) => {
+                    assert!(event.last_log_term == 3);
+                    assert!(event.log_length == 2);
+                }
+                _ => {
+                    panic!("Non-vote event!")
+                }
+            }
+        }
+        assert!(candidate.attempts == 1);
+    }
+
+    #[test]
+    fn test_timeout_many_iterations() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2]),
+        };
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            current_term: 3,
+            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]),
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState::default();
+        let mut candidate = Candidate {
+            attempts: 10000,
+            ..Default::default()
+        };
+        let request: Request<u32> = Request {
+            sender: 0,
+            reciever: persistent_state.id,
+            term: 0,
+            event: Event::Timeout(request::Timeout),
+        };
+
+        let (requests, next) =
+            candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
+
+        assert!(next.is_some());
+        if let Some(RaftState::Candidate(Candidate { attempts, votes })) = next {
+            assert!(attempts == 0);
+            assert!(votes.is_empty());
+            assert!(persistent_state.current_term == 4);
+        } else {
+            panic!("Transitioned to non-candidate!");
+        }
+
+        assert!(requests.len() == 2);
+        for request in requests {
+            assert!(request.sender == persistent_state.id);
+            assert!(request.term == persistent_state.current_term);
+            match request.event {
+                Event::Vote(event) => {
+                    assert!(event.last_log_term == 3);
+                    assert!(event.log_length == 2);
+                }
+                _ => {
+                    panic!("Non-vote event!")
+                }
+            }
+        }
+    }
+}
