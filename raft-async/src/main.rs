@@ -3,7 +3,7 @@ use std::time::Duration;
 use async_std::sync::Arc;
 
 use async_std::task;
-use server::{server::Server, switch::Switch};
+use server::{client::Client, server::Server, switch::Switch};
 
 mod data;
 mod raft_channel;
@@ -19,8 +19,16 @@ fn main() {
         .map(|id| Server::new(id, switch.clone()))
         .map(|server| Arc::new(task::block_on(server)))
         .collect::<Vec<_>>();
+    let clients = (10..12)
+        .map(|id| Client::new(id, switch.clone()))
+        .map(|client| Arc::new(task::block_on(client)))
+        .collect::<Vec<_>>();
     for server in servers {
         Server::init(server);
+    }
+
+    for client in clients {
+        Client::init(client);
     }
 
     task::block_on(task::spawn(async {

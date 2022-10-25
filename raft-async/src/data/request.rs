@@ -19,11 +19,11 @@ pub enum Event<T: DataType> {
 }
 
 pub struct Client<T: DataType> {
-    data: Entry<T>,
+    pub data: T,
 }
 
 pub enum ClientResponse<T: DataType> {
-    Failed { leader_id: u32 },
+    Failed { leader_id: u32, data: T },
     Success { data: T },
 }
 
