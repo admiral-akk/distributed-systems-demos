@@ -6,7 +6,9 @@ use crate::data::{
     data_type::DataType,
     entry::Entry,
     persistent_state::PersistentState,
-    request::{Append, AppendResponse, Request, Timeout, Vote, VoteResponse},
+    request::{
+        Append, AppendResponse, Client, ClientResponse, Event, Request, Timeout, Vote, VoteResponse,
+    },
     volitile_state::VolitileState,
 };
 
@@ -70,6 +72,8 @@ pub trait Handler<T: DataType>:
     + EventHandler<Timeout, T>
     + EventHandler<Vote, T>
     + EventHandler<VoteResponse, T>
+    + EventHandler<Client<T>, T>
+    + EventHandler<ClientResponse<T>, T>
 {
     fn handle_request(
         &mut self,
@@ -79,19 +83,25 @@ pub trait Handler<T: DataType>:
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         let (sender, term) = (request.sender, request.term);
         match request.event {
-            crate::data::request::Event::Append(event) => {
+            Event::Append(event) => {
                 self.handle_event(volitile_state, persistent_state, sender, term, event)
             }
-            crate::data::request::Event::AppendResponse(event) => {
+            Event::AppendResponse(event) => {
                 self.handle_event(volitile_state, persistent_state, sender, term, event)
             }
-            crate::data::request::Event::Vote(event) => {
+            Event::Vote(event) => {
                 self.handle_event(volitile_state, persistent_state, sender, term, event)
             }
-            crate::data::request::Event::VoteResponse(event) => {
+            Event::VoteResponse(event) => {
                 self.handle_event(volitile_state, persistent_state, sender, term, event)
             }
-            crate::data::request::Event::Timeout(event) => {
+            Event::Timeout(event) => {
+                self.handle_event(volitile_state, persistent_state, sender, term, event)
+            }
+            Event::Client(event) => {
+                self.handle_event(volitile_state, persistent_state, sender, term, event)
+            }
+            Event::ClientResponse(event) => {
                 self.handle_event(volitile_state, persistent_state, sender, term, event)
             }
         }

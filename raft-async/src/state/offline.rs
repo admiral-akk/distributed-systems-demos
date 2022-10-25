@@ -3,7 +3,9 @@ use std::time::Duration;
 use crate::data::{
     data_type::DataType,
     persistent_state::PersistentState,
-    request::{Append, AppendResponse, Request, Timeout, Vote, VoteResponse},
+    request::{
+        Append, AppendResponse, Client, ClientResponse, Request, Timeout, Vote, VoteResponse,
+    },
     volitile_state::VolitileState,
 };
 
@@ -24,6 +26,8 @@ impl TimeoutHandler for Offline {
 impl<T: DataType> Handler<T> for Offline {}
 
 impl<T: DataType> EventHandler<Append<T>, T> for Offline {}
+impl<T: DataType> EventHandler<Client<T>, T> for Offline {}
+impl<T: DataType> EventHandler<ClientResponse<T>, T> for Offline {}
 
 impl<T: DataType> EventHandler<Vote, T> for Offline {}
 

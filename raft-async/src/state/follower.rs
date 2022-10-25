@@ -3,7 +3,9 @@ use std::time::Duration;
 use crate::data::{
     data_type::DataType,
     persistent_state::PersistentState,
-    request::{Append, AppendResponse, Event, Request, Timeout, Vote, VoteResponse},
+    request::{
+        Append, AppendResponse, Client, ClientResponse, Event, Request, Timeout, Vote, VoteResponse,
+    },
     volitile_state::VolitileState,
 };
 
@@ -132,3 +134,6 @@ impl<T: DataType> EventHandler<Append<T>, T> for Follower {
 }
 
 impl<T: DataType> Handler<T> for Follower {}
+
+impl<T: DataType> EventHandler<Client<T>, T> for Follower {}
+impl<T: DataType> EventHandler<ClientResponse<T>, T> for Follower {}

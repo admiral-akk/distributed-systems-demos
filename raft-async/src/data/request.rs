@@ -14,6 +14,17 @@ pub enum Event<T: DataType> {
     Vote(Vote),
     VoteResponse(VoteResponse),
     Timeout(Timeout),
+    Client(Client<T>),
+    ClientResponse(ClientResponse<T>),
+}
+
+pub struct Client<T: DataType> {
+    data: Entry<T>,
+}
+
+pub enum ClientResponse<T: DataType> {
+    Failed { leader_id: u32 },
+    Success { data: T },
 }
 
 pub struct Append<T: DataType> {

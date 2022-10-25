@@ -3,7 +3,9 @@ use std::{collections::HashMap, time::Duration};
 use crate::data::{
     data_type::DataType,
     persistent_state::PersistentState,
-    request::{Append, AppendResponse, Event, Request, Timeout, Vote, VoteResponse},
+    request::{
+        Append, AppendResponse, Client, ClientResponse, Event, Request, Timeout, Vote, VoteResponse,
+    },
     volitile_state::VolitileState,
 };
 
@@ -94,6 +96,8 @@ impl Leader {
 
 impl<T: DataType> Handler<T> for Leader {}
 impl<T: DataType> EventHandler<Vote, T> for Leader {}
+impl<T: DataType> EventHandler<Client<T>, T> for Leader {}
+impl<T: DataType> EventHandler<ClientResponse<T>, T> for Leader {}
 impl<T: DataType> EventHandler<VoteResponse, T> for Leader {}
 impl<T: DataType> EventHandler<Timeout, T> for Leader {
     fn handle_event(
@@ -120,7 +124,9 @@ impl<T: DataType> EventHandler<AppendResponse, T> for Leader {
         let next_index = self.next_index[&sender];
         if event.success {
             self.match_index.insert(sender, next_index);
-            self.next_index.insert(sender, next_index + 1);
+            if next_index < persistent_state.log.len() {
+                self.next_index.insert(sender, next_index + 1);
+            }
         } else if next_index > 0 {
             self.next_index.insert(sender, next_index - 1);
         }

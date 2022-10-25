@@ -8,7 +8,9 @@ use super::{
 use crate::data::{
     data_type::DataType,
     persistent_state::PersistentState,
-    request::{Append, AppendResponse, Event, Request, Timeout, Vote, VoteResponse},
+    request::{
+        Append, AppendResponse, Client, ClientResponse, Event, Request, Timeout, Vote, VoteResponse,
+    },
     volitile_state::VolitileState,
 };
 
@@ -25,6 +27,8 @@ impl TimeoutHandler for Candidate {
 
 impl<T: DataType> Handler<T> for Candidate {}
 impl<T: DataType> EventHandler<Vote, T> for Candidate {}
+impl<T: DataType> EventHandler<Client<T>, T> for Candidate {}
+impl<T: DataType> EventHandler<ClientResponse<T>, T> for Candidate {}
 impl<T: DataType> EventHandler<AppendResponse, T> for Candidate {}
 impl<T: DataType> EventHandler<Timeout, T> for Candidate {
     fn handle_event(
