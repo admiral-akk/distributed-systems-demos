@@ -46,7 +46,7 @@ impl Leader {
         persistent_state: &mut PersistentState<T>,
         server: u32,
     ) -> Request<T> {
-        let next_index = self.match_index[&server];
+        let next_index = self.next_index[&server];
         // Append at most 10 elements
         let entries = match next_index < persistent_state.log.len() {
             true => Vec::from(
@@ -163,5 +163,68 @@ impl<T: DataType> EventHandler<AppendResponse, T> for Leader {
             println!("{} index committed!", next_index);
         }
         (Vec::default(), None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use crate::data::entry::Entry;
+    use crate::data::persistent_state::Config;
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+
+    #[test]
+    fn test_elected() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2, 3, 4]),
+        };
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            current_term: 3,
+            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]),
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState { commit_index: 1 };
+
+        let (requests, next) = Leader::from_candidate(
+            &Candidate::default(),
+            &mut volitile_state,
+            &mut persistent_state,
+        );
+
+        assert!(next.is_some());
+        if let Some(RaftState::Leader(Leader {
+            next_index,
+            match_index,
+        })) = next
+        {
+            for (_, v) in next_index {
+                assert_eq!(v, persistent_state.log.len());
+            }
+            for (_, v) in match_index {
+                assert_eq!(v, 0);
+            }
+        } else {
+            panic!("Transitioned to non-leader state!");
+        }
+        assert!(requests.len() == 4);
+        for request in requests {
+            assert!(request.sender == persistent_state.id);
+            assert!(request.term == persistent_state.current_term);
+            match request.event {
+                Event::Append(event) => {
+                    assert_eq!(event.prev_log_length, 2);
+                    assert_eq!(event.prev_log_term, 3);
+                    assert_eq!(event.leader_commit, 1);
+                    assert!(event.entries.is_empty());
+                }
+                _ => {
+                    panic!("Non-append event!")
+                }
+            }
+        }
     }
 }
