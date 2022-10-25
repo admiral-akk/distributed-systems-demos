@@ -759,4 +759,97 @@ mod tests {
         }
         assert!(persistent_state.log.iter().eq(log.iter()));
     }
+    #[test]
+    fn test_client_request() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2, 3, 4]),
+        };
+        let log = Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]);
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            current_term: 3,
+            log: log.clone(),
+            voted_for: Some(0),
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState { commit_index: 1 };
+        let request: Request<u32> = Request {
+            sender: 10,
+            reciever: persistent_state.id,
+            term: 0,
+            event: Event::Client(request::Client { data: 2 }),
+        };
+
+        let mut follower = Follower {};
+
+        let (requests, next) =
+            follower.handle_request(&mut volitile_state, &mut persistent_state, request);
+
+        assert!(next.is_none());
+        assert_eq!(requests.len(), 1);
+        for request in requests {
+            assert_eq!(request.sender, persistent_state.id);
+            assert_eq!(request.reciever, 10);
+            assert_eq!(request.term, 0);
+            match request.event {
+                Event::ClientResponse(ClientResponse::Failed {
+                    leader_id: Some(leader_id),
+                    data,
+                }) => {
+                    assert_eq!(data, 2);
+                    assert_eq!(leader_id, 0);
+                }
+                _ => {
+                    panic!("Invalid client response!");
+                }
+            }
+        }
+    }
+    #[test]
+    fn test_client_request_no_leader() {
+        let config = Config {
+            servers: HashSet::from([0, 1, 2, 3, 4]),
+        };
+        let log = Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]);
+        let mut persistent_state: PersistentState<u32> = PersistentState {
+            config,
+            id: 1,
+            current_term: 3,
+            log: log.clone(),
+            voted_for: None,
+            ..Default::default()
+        };
+        let mut volitile_state = VolitileState { commit_index: 1 };
+        let request: Request<u32> = Request {
+            sender: 10,
+            reciever: persistent_state.id,
+            term: 0,
+            event: Event::Client(request::Client { data: 2 }),
+        };
+
+        let mut follower = Follower {};
+
+        let (requests, next) =
+            follower.handle_request(&mut volitile_state, &mut persistent_state, request);
+
+        assert!(next.is_none());
+        assert_eq!(requests.len(), 1);
+        for request in requests {
+            assert_eq!(request.sender, persistent_state.id);
+            assert_eq!(request.reciever, 10);
+            assert_eq!(request.term, 0);
+            match request.event {
+                Event::ClientResponse(ClientResponse::Failed {
+                    leader_id: None,
+                    data,
+                }) => {
+                    assert_eq!(data, 2);
+                }
+                _ => {
+                    panic!("Invalid client response!");
+                }
+            }
+        }
+    }
 }
