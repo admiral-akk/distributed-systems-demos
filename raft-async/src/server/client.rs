@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::data::{
-    data_type::DataType,
+    data_type::CommandType,
     persistent_state::PersistentState,
     request::{self, ClientResponse, Event, Request},
 };
@@ -14,7 +14,7 @@ use rand::Rng;
 
 use super::switch::Switch;
 
-pub struct Client<T: DataType> {
+pub struct Client<T: CommandType> {
     pub id: u32,
     pub leader_id: Mutex<u32>,
     pub input: Receiver<Request<T>>,
@@ -24,7 +24,7 @@ pub struct Client<T: DataType> {
 
 const WAIT: Duration = Duration::from_millis(500);
 
-impl<T: DataType> Client<T>
+impl<T: CommandType> Client<T>
 where
     PersistentState<T>: Default,
 {

@@ -1,7 +1,7 @@
-use super::data_type::DataType;
+use super::data_type::CommandType;
 use super::entry::Entry;
 
-pub struct Request<T: DataType> {
+pub struct Request<T: CommandType> {
     // Todo: figure out better framing for sender/reciever/term, since it's not relevant to all events.
     pub sender: u32,
     pub reciever: u32,
@@ -9,7 +9,7 @@ pub struct Request<T: DataType> {
     pub event: Event<T>,
 }
 
-pub enum Event<T: DataType> {
+pub enum Event<T: CommandType> {
     Append(Append<T>),
     AppendResponse(AppendResponse),
     Vote(Vote),
@@ -19,16 +19,16 @@ pub enum Event<T: DataType> {
     ClientResponse(ClientResponse<T>),
 }
 
-pub struct Client<T: DataType> {
+pub struct Client<T: CommandType> {
     pub data: T,
 }
 
-pub enum ClientResponse<T: DataType> {
+pub enum ClientResponse<T: CommandType> {
     Failed { leader_id: Option<u32>, data: T },
     Success { data: T },
 }
 
-pub struct Append<T: DataType> {
+pub struct Append<T: CommandType> {
     pub prev_log_length: usize,
     pub prev_log_term: u32,
     pub entries: Vec<Entry<T>>,

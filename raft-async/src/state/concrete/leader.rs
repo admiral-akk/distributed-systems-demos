@@ -1,7 +1,7 @@
 use std::{collections::HashMap, time::Duration};
 
 use crate::data::{
-    data_type::DataType,
+    data_type::CommandType,
     entry::Entry,
     persistent_state::PersistentState,
     request::{
@@ -28,7 +28,7 @@ impl TimeoutHandler for Leader {
 }
 
 impl Leader {
-    pub fn send_heartbeat<T: DataType>(
+    pub fn send_heartbeat<T: CommandType>(
         &self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
@@ -40,7 +40,7 @@ impl Leader {
             .collect()
     }
 
-    fn append_update<T: DataType>(
+    fn append_update<T: CommandType>(
         &self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
@@ -72,7 +72,7 @@ impl Leader {
         }
     }
 
-    pub fn from_candidate<T: DataType>(
+    pub fn from_candidate<T: CommandType>(
         _candidate: &Candidate,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
@@ -97,9 +97,9 @@ impl Leader {
     }
 }
 
-impl<T: DataType> Handler<T> for Leader {}
-impl<T: DataType> EventHandler<Vote, T> for Leader {}
-impl<T: DataType> EventHandler<Client<T>, T> for Leader {
+impl<T: CommandType> Handler<T> for Leader {}
+impl<T: CommandType> EventHandler<Vote, T> for Leader {}
+impl<T: CommandType> EventHandler<Client<T>, T> for Leader {
     fn handle_event(
         &mut self,
         _volitile_state: &mut VolitileState,
@@ -110,7 +110,7 @@ impl<T: DataType> EventHandler<Client<T>, T> for Leader {
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         persistent_state.log.push(Entry {
             term: persistent_state.current_term,
-            data: event.data,
+            command: event.data,
         });
         println!(
             "{} appending entry, index: {}",
@@ -120,9 +120,9 @@ impl<T: DataType> EventHandler<Client<T>, T> for Leader {
         (Vec::new(), None)
     }
 }
-impl<T: DataType> EventHandler<ClientResponse<T>, T> for Leader {}
-impl<T: DataType> EventHandler<VoteResponse, T> for Leader {}
-impl<T: DataType> EventHandler<Timeout, T> for Leader {
+impl<T: CommandType> EventHandler<ClientResponse<T>, T> for Leader {}
+impl<T: CommandType> EventHandler<VoteResponse, T> for Leader {}
+impl<T: CommandType> EventHandler<Timeout, T> for Leader {
     fn handle_event(
         &mut self,
         volitile_state: &mut VolitileState,
@@ -134,8 +134,8 @@ impl<T: DataType> EventHandler<Timeout, T> for Leader {
         (self.send_heartbeat(volitile_state, persistent_state), None)
     }
 }
-impl<T: DataType> EventHandler<Append<T>, T> for Leader {}
-impl<T: DataType> EventHandler<AppendResponse, T> for Leader {
+impl<T: CommandType> EventHandler<Append<T>, T> for Leader {}
+impl<T: CommandType> EventHandler<AppendResponse, T> for Leader {
     fn handle_event(
         &mut self,
         volitile_state: &mut VolitileState,
@@ -186,7 +186,16 @@ mod tests {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]),
+            log: Vec::from([
+                Entry {
+                    term: 1,
+                    command: 10,
+                },
+                Entry {
+                    term: 3,
+                    command: 4,
+                },
+            ]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState { commit_index: 1 };
@@ -240,7 +249,16 @@ mod tests {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]),
+            log: Vec::from([
+                Entry {
+                    term: 1,
+                    command: 10,
+                },
+                Entry {
+                    term: 3,
+                    command: 4,
+                },
+            ]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState { commit_index: 1 };
@@ -287,7 +305,16 @@ mod tests {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]),
+            log: Vec::from([
+                Entry {
+                    term: 1,
+                    command: 10,
+                },
+                Entry {
+                    term: 3,
+                    command: 4,
+                },
+            ]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState { commit_index: 2 };
@@ -322,7 +349,16 @@ mod tests {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]),
+            log: Vec::from([
+                Entry {
+                    term: 1,
+                    command: 10,
+                },
+                Entry {
+                    term: 3,
+                    command: 4,
+                },
+            ]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState { commit_index: 1 };
@@ -357,7 +393,16 @@ mod tests {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]),
+            log: Vec::from([
+                Entry {
+                    term: 1,
+                    command: 10,
+                },
+                Entry {
+                    term: 3,
+                    command: 4,
+                },
+            ]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState { commit_index: 1 };
@@ -388,7 +433,16 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
-        let log = Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]);
+        let log = Vec::from([
+            Entry {
+                term: 1,
+                command: 10,
+            },
+            Entry {
+                term: 3,
+                command: 4,
+            },
+        ]);
         let mut persistent_state: PersistentState<u32> = PersistentState {
             config,
             id: 1,
@@ -418,6 +472,10 @@ mod tests {
         assert_eq!(volitile_state.commit_index, 1);
         assert_eq!(persistent_state.log.len(), 3);
         assert!(log.iter().eq(persistent_state.log[0..2].iter()));
-        assert!(Entry { term: 3, data: 2 }.eq(&persistent_state.log[2]));
+        assert!(Entry {
+            term: 3,
+            command: 2
+        }
+        .eq(&persistent_state.log[2]));
     }
 }

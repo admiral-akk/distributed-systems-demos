@@ -2,7 +2,7 @@ use std::{collections::HashSet, time::Duration};
 
 use super::{follower::Follower, leader::Leader};
 use crate::data::{
-    data_type::DataType,
+    data_type::CommandType,
     persistent_state::PersistentState,
     request::{
         Append, AppendResponse, Client, ClientResponse, Event, Request, Timeout, Vote, VoteResponse,
@@ -25,12 +25,12 @@ impl TimeoutHandler for Candidate {
     }
 }
 
-impl<T: DataType> Handler<T> for Candidate {}
-impl<T: DataType> EventHandler<Vote, T> for Candidate {}
-impl<T: DataType> EventHandler<Client<T>, T> for Candidate {}
-impl<T: DataType> EventHandler<ClientResponse<T>, T> for Candidate {}
-impl<T: DataType> EventHandler<AppendResponse, T> for Candidate {}
-impl<T: DataType> EventHandler<Timeout, T> for Candidate {
+impl<T: CommandType> Handler<T> for Candidate {}
+impl<T: CommandType> EventHandler<Vote, T> for Candidate {}
+impl<T: CommandType> EventHandler<Client<T>, T> for Candidate {}
+impl<T: CommandType> EventHandler<ClientResponse<T>, T> for Candidate {}
+impl<T: CommandType> EventHandler<AppendResponse, T> for Candidate {}
+impl<T: CommandType> EventHandler<Timeout, T> for Candidate {
     fn handle_event(
         &mut self,
         _volitile_state: &mut VolitileState,
@@ -48,7 +48,7 @@ impl<T: DataType> EventHandler<Timeout, T> for Candidate {
     }
 }
 
-impl<T: DataType> EventHandler<Append<T>, T> for Candidate {
+impl<T: CommandType> EventHandler<Append<T>, T> for Candidate {
     fn handle_event(
         &mut self,
         _volitile_state: &mut VolitileState,
@@ -65,7 +65,7 @@ impl<T: DataType> EventHandler<Append<T>, T> for Candidate {
         (Vec::default(), None)
     }
 }
-impl<T: DataType> EventHandler<VoteResponse, T> for Candidate {
+impl<T: CommandType> EventHandler<VoteResponse, T> for Candidate {
     fn handle_event(
         &mut self,
         volitile_state: &mut VolitileState,
@@ -86,7 +86,7 @@ impl<T: DataType> EventHandler<VoteResponse, T> for Candidate {
 }
 
 impl Candidate {
-    fn request_votes<T: DataType>(persistent_state: &mut PersistentState<T>) -> Vec<Request<T>> {
+    fn request_votes<T: CommandType>(persistent_state: &mut PersistentState<T>) -> Vec<Request<T>> {
         persistent_state
             .other_servers()
             .iter()
@@ -101,7 +101,7 @@ impl Candidate {
             })
             .collect()
     }
-    pub fn call_election<T: DataType>(
+    pub fn call_election<T: CommandType>(
         persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         println!("{} running for office!", persistent_state.id);
@@ -134,7 +134,16 @@ mod tests {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]),
+            log: Vec::from([
+                Entry {
+                    term: 1,
+                    command: 10,
+                },
+                Entry {
+                    term: 3,
+                    command: 4,
+                },
+            ]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
@@ -180,7 +189,16 @@ mod tests {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]),
+            log: Vec::from([
+                Entry {
+                    term: 1,
+                    command: 10,
+                },
+                Entry {
+                    term: 3,
+                    command: 4,
+                },
+            ]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
@@ -233,7 +251,16 @@ mod tests {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]),
+            log: Vec::from([
+                Entry {
+                    term: 1,
+                    command: 10,
+                },
+                Entry {
+                    term: 3,
+                    command: 4,
+                },
+            ]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
@@ -268,7 +295,16 @@ mod tests {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]),
+            log: Vec::from([
+                Entry {
+                    term: 1,
+                    command: 10,
+                },
+                Entry {
+                    term: 3,
+                    command: 4,
+                },
+            ]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
@@ -303,7 +339,16 @@ mod tests {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]),
+            log: Vec::from([
+                Entry {
+                    term: 1,
+                    command: 10,
+                },
+                Entry {
+                    term: 3,
+                    command: 4,
+                },
+            ]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
@@ -338,7 +383,16 @@ mod tests {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]),
+            log: Vec::from([
+                Entry {
+                    term: 1,
+                    command: 10,
+                },
+                Entry {
+                    term: 3,
+                    command: 4,
+                },
+            ]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
@@ -372,7 +426,16 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
-        let log = Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]);
+        let log = Vec::from([
+            Entry {
+                term: 1,
+                command: 10,
+            },
+            Entry {
+                term: 3,
+                command: 4,
+            },
+        ]);
         let mut persistent_state: PersistentState<u32> = PersistentState {
             config,
             id: 1,
@@ -385,7 +448,10 @@ mod tests {
             attempts: 0,
             votes: HashSet::from([0]),
         };
-        let entries = Vec::from([Entry { term: 4, data: 5 }]);
+        let entries = Vec::from([Entry {
+            term: 4,
+            command: 5,
+        }]);
         let request: Request<u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
@@ -410,7 +476,16 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
-        let log = Vec::from([Entry { term: 1, data: 10 }, Entry { term: 3, data: 4 }]);
+        let log = Vec::from([
+            Entry {
+                term: 1,
+                command: 10,
+            },
+            Entry {
+                term: 3,
+                command: 4,
+            },
+        ]);
         let mut persistent_state: PersistentState<u32> = PersistentState {
             config,
             id: 1,
@@ -423,7 +498,10 @@ mod tests {
             attempts: 0,
             votes: HashSet::from([0]),
         };
-        let entries = Vec::from([Entry { term: 4, data: 5 }]);
+        let entries = Vec::from([Entry {
+            term: 4,
+            command: 5,
+        }]);
         let request: Request<u32> = Request {
             sender: 0,
             reciever: persistent_state.id,

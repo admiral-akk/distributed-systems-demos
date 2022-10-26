@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use crate::{
     data::{
-        data_type::DataType,
+        data_type::CommandType,
         persistent_state::{Config, PersistentState},
         request::Request,
         volitile_state::VolitileState,
@@ -12,13 +12,13 @@ use crate::{
 
 use super::{concrete::offline::Offline, raft_state::RaftState};
 
-pub struct State<T: DataType> {
+pub struct State<T: CommandType> {
     pub persistent_state: PersistentState<T>,
     pub raft_state: RaftState,
     pub volitile_state: VolitileState,
 }
 
-impl<T: DataType> State<T> {
+impl<T: CommandType> State<T> {
     pub fn new(id: u32, config: Config) -> Self {
         Self {
             persistent_state: PersistentState {

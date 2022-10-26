@@ -7,16 +7,16 @@ use async_std::{
 };
 use rand::Rng;
 
-use crate::data::{data_type::DataType, request::Request};
+use crate::data::{data_type::CommandType, request::Request};
 
 // Responsible for routing requests between servers.
-pub struct Switch<T: DataType> {
+pub struct Switch<T: CommandType> {
     pub sender: Sender<Request<T>>,
     pub reciever: Receiver<Request<T>>,
     pub senders: Mutex<HashMap<u32, Sender<Request<T>>>>,
 }
 
-impl<T: DataType> Switch<T> {
+impl<T: CommandType> Switch<T> {
     pub fn new() -> Self {
         let (sender, reciever) = channel::unbounded();
         Self {

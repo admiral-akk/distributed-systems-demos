@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use crate::{
     data::{
-        data_type::DataType,
+        data_type::CommandType,
         persistent_state::PersistentState,
         request::{
             Append, AppendResponse, Client, ClientResponse, Request, Timeout, Vote, VoteResponse,
@@ -26,17 +26,17 @@ impl TimeoutHandler for Offline {
     }
 }
 
-impl<T: DataType> Handler<T> for Offline {}
+impl<T: CommandType> Handler<T> for Offline {}
 
-impl<T: DataType> EventHandler<Append<T>, T> for Offline {}
-impl<T: DataType> EventHandler<Client<T>, T> for Offline {}
-impl<T: DataType> EventHandler<ClientResponse<T>, T> for Offline {}
+impl<T: CommandType> EventHandler<Append<T>, T> for Offline {}
+impl<T: CommandType> EventHandler<Client<T>, T> for Offline {}
+impl<T: CommandType> EventHandler<ClientResponse<T>, T> for Offline {}
 
-impl<T: DataType> EventHandler<Vote, T> for Offline {}
+impl<T: CommandType> EventHandler<Vote, T> for Offline {}
 
-impl<T: DataType> EventHandler<VoteResponse, T> for Offline {}
+impl<T: CommandType> EventHandler<VoteResponse, T> for Offline {}
 
-impl<T: DataType> EventHandler<Timeout, T> for Offline {
+impl<T: CommandType> EventHandler<Timeout, T> for Offline {
     fn handle_event(
         &mut self,
         volitile_state: &mut VolitileState,
@@ -52,7 +52,7 @@ impl<T: DataType> EventHandler<Timeout, T> for Offline {
     }
 }
 
-impl<T: DataType> EventHandler<AppendResponse, T> for Offline {}
+impl<T: CommandType> EventHandler<AppendResponse, T> for Offline {}
 
 #[cfg(test)]
 mod tests {
@@ -73,7 +73,16 @@ mod tests {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([Entry { term: 1, data: 10 }, Entry { term: 2, data: 4 }]),
+            log: Vec::from([
+                Entry {
+                    term: 1,
+                    command: 10,
+                },
+                Entry {
+                    term: 2,
+                    command: 4,
+                },
+            ]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();

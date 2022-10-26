@@ -9,7 +9,7 @@ use rand::Rng;
 
 use crate::{
     data::{
-        data_type::DataType,
+        data_type::CommandType,
         persistent_state::{Config, PersistentState},
         request::{Event, Request, Timeout},
     },
@@ -18,7 +18,7 @@ use crate::{
 
 use super::switch::Switch;
 
-pub struct Server<T: DataType> {
+pub struct Server<T: CommandType> {
     pub state: Mutex<State<T>>,
     pub input: Receiver<Request<T>>,
     pub output: Sender<Request<T>>,
@@ -27,7 +27,7 @@ pub struct Server<T: DataType> {
 
 const SERVER_FAILURE: Duration = Duration::from_millis(10000);
 
-impl<T: DataType> Server<T>
+impl<T: CommandType> Server<T>
 where
     PersistentState<T>: Default,
 {

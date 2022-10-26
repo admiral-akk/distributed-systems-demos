@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::data::{
-    data_type::DataType,
+    data_type::CommandType,
     persistent_state::PersistentState,
     request::{
         Append, AppendResponse, Client, ClientResponse, Event, Request, Timeout, Vote, VoteResponse,
@@ -15,7 +15,7 @@ pub trait TimeoutHandler {
     fn timeout_length(&self) -> Duration;
 }
 
-pub trait EventHandler<EventType, T: DataType> {
+pub trait EventHandler<EventType, T: CommandType> {
     fn handle_event(
         &mut self,
         _volitile_state: &mut VolitileState,
@@ -28,7 +28,7 @@ pub trait EventHandler<EventType, T: DataType> {
     }
 }
 
-pub trait Handler<T: DataType>:
+pub trait Handler<T: CommandType>:
     EventHandler<Append<T>, T>
     + EventHandler<AppendResponse, T>
     + EventHandler<Timeout, T>

@@ -1,7 +1,7 @@
-use super::data_type::DataType;
+use super::data_type::CommandType;
 
 #[derive(Clone, Copy, PartialEq)]
-pub struct Entry<T: DataType> {
+pub struct Entry<T: CommandType> {
     pub term: u32,
-    pub data: T,
+    pub command: T,
 }

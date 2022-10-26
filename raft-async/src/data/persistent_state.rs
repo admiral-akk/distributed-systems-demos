@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use super::{data_type::DataType, entry::Entry};
+use super::{data_type::CommandType, entry::Entry};
 
 #[derive(Default)]
 pub struct Config {
@@ -8,7 +8,7 @@ pub struct Config {
 }
 
 #[derive(Default)]
-pub struct PersistentState<T: DataType> {
+pub struct PersistentState<T: CommandType> {
     pub id: u32,
     pub current_term: u32,
     pub voted_for: Option<u32>,
@@ -17,7 +17,7 @@ pub struct PersistentState<T: DataType> {
     pub keep_alive: u32,
 }
 
-impl<T: DataType> PersistentState<T> {
+impl<T: CommandType> PersistentState<T> {
     pub fn prev_term(&self, index: usize) -> u32 {
         if self.log.is_empty() || index == 0 {
             0

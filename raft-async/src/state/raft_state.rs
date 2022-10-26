@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::data::{
-    data_type::DataType, persistent_state::PersistentState, request::Request,
+    data_type::CommandType, persistent_state::PersistentState, request::Request,
     volitile_state::VolitileState,
 };
 
@@ -54,7 +54,7 @@ impl RaftState {
         }
     }
 
-    pub fn handle_request<T: DataType>(
+    pub fn handle_request<T: CommandType>(
         &mut self,
         request: Request<T>,
         volitile_state: &mut VolitileState,
