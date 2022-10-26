@@ -24,10 +24,7 @@ pub struct Client<T: CommandType> {
 
 const WAIT: Duration = Duration::from_millis(500);
 
-impl<T: CommandType> Client<T>
-where
-    PersistentState<T>: Default,
-{
+impl<T: CommandType> Client<T> {
     pub async fn new(id: u32, switch: Arc<Switch<T>>) -> Self {
         let (output, server_sender, input) = switch.register(id).await;
         Self {
