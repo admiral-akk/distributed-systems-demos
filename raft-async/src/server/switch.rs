@@ -56,9 +56,8 @@ impl<T: Message> Switch<T> {
         }
     }
     pub async fn register(&self, id: Id) -> (Sender<T>, Sender<T>, Receiver<T>) {
-        let mut senders = self.senders.lock().await;
         let (server_sender, server_reciever) = channel::unbounded();
-        senders.insert(id, server_sender.clone());
+        self.senders.lock().await.insert(id, server_sender.clone());
         (self.sender.clone(), server_sender, server_reciever)
     }
 }
