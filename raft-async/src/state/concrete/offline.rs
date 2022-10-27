@@ -105,7 +105,7 @@ mod tests {
         assert!(requests.is_empty());
         assert_eq!(persistent_state.voted_for, None);
         assert_eq!(volitile_state.tick_since_start, 1);
-        assert_eq!(volitile_state.commit_index, 0);
+        assert_eq!(volitile_state.get_commit_index(), 0);
     }
 
     #[test]
@@ -156,6 +156,6 @@ mod tests {
         assert!(requests.is_empty());
         assert_eq!(persistent_state.voted_for, None);
         assert_eq!(volitile_state.tick_since_start, 0);
-        assert_eq!(volitile_state.commit_index, 0);
+        assert_eq!(volitile_state.get_commit_index(), 0);
     }
 }

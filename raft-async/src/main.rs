@@ -4,6 +4,7 @@ use async_std::sync::Arc;
 
 use async_std::task;
 use data::request::Request;
+use rand::{Rng, RngCore};
 use server::{client::Client, server::Server, switch::Switch};
 use state::state::StateMachine;
 
@@ -26,6 +27,18 @@ impl StateMachine<u32, u32> for Sum {
     }
 }
 
+pub trait DataGenerator<T>: Default + Send + 'static {
+    fn gen(&self) -> T;
+}
+
+#[derive(Default)]
+pub struct RandNum {}
+impl DataGenerator<u32> for RandNum {
+    fn gen(&self) -> u32 {
+        rand::thread_rng().gen_range(1..5)
+    }
+}
+
 fn main() {
     let switch: Arc<Switch<Request<u32, u32>>> = Switch::init();
     let servers = (0..5)
@@ -41,7 +54,7 @@ fn main() {
     }
 
     for client in clients {
-        Client::init(client);
+        Client::init::<RandNum>(client);
     }
 
     task::block_on(task::spawn(async {

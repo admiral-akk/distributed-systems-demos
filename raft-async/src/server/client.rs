@@ -1,8 +1,11 @@
 use std::time::Duration;
 
-use crate::data::{
-    data_type::CommandType,
-    request::{self, ClientResponse, Event, Request},
+use crate::{
+    data::{
+        data_type::CommandType,
+        request::{self, ClientResponse, Event, Request},
+    },
+    DataGenerator,
 };
 use async_std::{
     channel::{Receiver, Sender},
@@ -41,12 +44,12 @@ where
         }
     }
 
-    pub fn init(server: Arc<Client<T, Output>>) {
-        task::spawn(Client::request_loop(server.clone()));
+    pub fn init<Gen: DataGenerator<T>>(server: Arc<Client<T, Output>>) {
+        task::spawn(Client::request_loop(server.clone(), Gen::default()));
         task::spawn(Client::response_loop(server.clone()));
     }
 
-    async fn request_loop(client: Arc<Client<T, Output>>) {
+    async fn request_loop<Gen: DataGenerator<T>>(client: Arc<Client<T, Output>>, data_gen: Gen) {
         loop {
             let wait_duration = rand::thread_rng().gen_range((WAIT / 2)..(2 * WAIT));
             task::sleep(wait_duration).await;
@@ -54,7 +57,9 @@ where
                 sender: client.id,
                 reciever: *client.leader_id.lock().await,
                 term: 0,
-                event: Event::Client(request::Client { data: T::default() }),
+                event: Event::Client(request::Client {
+                    data: data_gen.gen(),
+                }),
             };
             client.output.send(request).await;
         }

@@ -23,7 +23,7 @@ impl EventHandler for Follower {
         self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-        _state_machine: &mut SM,
+        state_machine: &mut SM,
         sender: u32,
         term: u32,
         request: Request<T, Output>,
@@ -68,7 +68,11 @@ impl EventHandler for Follower {
                 }
 
                 if success {
-                    volitile_state.commit_index = max_commit_index.max(volitile_state.commit_index);
+                    volitile_state.try_update_commit_index(
+                        state_machine,
+                        persistent_state,
+                        max_commit_index,
+                    );
                 }
 
                 (
@@ -296,7 +300,7 @@ mod tests {
             }
         }
         assert!(log.iter().eq(persistent_state.log.iter()));
-        assert!(volitile_state.commit_index == 0);
+        assert!(volitile_state.get_commit_index() == 0);
     }
 
     #[test]
@@ -370,7 +374,7 @@ mod tests {
             }
         }
         assert!(log.iter().eq(persistent_state.log.iter()));
-        assert!(volitile_state.commit_index == 0);
+        assert!(volitile_state.get_commit_index() == 0);
     }
 
     #[test]
@@ -441,7 +445,7 @@ mod tests {
             }
         }
         assert!(log.iter().eq(persistent_state.log.iter()));
-        assert!(volitile_state.commit_index == 0);
+        assert!(volitile_state.get_commit_index() == 0);
     }
 
     #[test]
@@ -515,7 +519,7 @@ mod tests {
 
         assert!(log[0..2].iter().eq(persistent_state.log[0..2].iter()));
         assert!(entries[0..1].iter().eq(persistent_state.log[2..3].iter()));
-        assert!(volitile_state.commit_index == 2);
+        assert!(volitile_state.get_commit_index() == 2);
     }
 
     #[test]
@@ -598,7 +602,7 @@ mod tests {
         assert!(log[0..2].iter().eq(persistent_state.log[0..2].iter()));
         assert!(entries[0..1].iter().eq(persistent_state.log[2..3].iter()));
         assert!(persistent_state.log.len() == 3);
-        assert!(volitile_state.commit_index == 3);
+        assert!(volitile_state.get_commit_index() == 3);
     }
 
     #[test]

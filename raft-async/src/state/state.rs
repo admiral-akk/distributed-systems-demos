@@ -1,6 +1,6 @@
 use crate::{
     data::{
-        data_type::CommandType,
+        data_type::{CommandType, OutputType},
         persistent_state::{Config, PersistentState},
         request::Request,
         volitile_state::VolitileState,
@@ -38,7 +38,7 @@ impl<T: CommandType, SM: Default> State<T, SM> {
         }
     }
 
-    pub fn handle_request<Output>(
+    pub fn handle_request<Output: OutputType>(
         mut self,
         request: Request<T, Output>,
     ) -> (Vec<Request<T, Output>>, Self)

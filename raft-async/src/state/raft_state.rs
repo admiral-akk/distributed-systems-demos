@@ -1,5 +1,7 @@
 use crate::data::{
-    data_type::CommandType, persistent_state::PersistentState, request::Request,
+    data_type::{CommandType, OutputType},
+    persistent_state::PersistentState,
+    request::Request,
     volitile_state::VolitileState,
 };
 
@@ -44,7 +46,7 @@ impl From<Candidate> for RaftState {
 }
 
 impl RaftState {
-    pub fn handle_request<T: CommandType, Output, SM>(
+    pub fn handle_request<T: CommandType, Output: OutputType, SM>(
         self,
         request: Request<T, Output>,
         volitile_state: &mut VolitileState,

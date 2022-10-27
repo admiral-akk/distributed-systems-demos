@@ -1,5 +1,5 @@
 use crate::data::{
-    data_type::CommandType,
+    data_type::{CommandType, OutputType},
     persistent_state::PersistentState,
     request::{Event, Request},
     volitile_state::VolitileState,
@@ -11,7 +11,7 @@ pub trait EventHandler
 where
     Self: Into<RaftState>,
 {
-    fn handle<T: CommandType, Output, SM>(
+    fn handle<T: CommandType, Output: OutputType, SM>(
         self,
         _volitile_state: &mut VolitileState,
         _persistent_state: &mut PersistentState<T>,
@@ -28,7 +28,7 @@ where
 }
 
 pub trait Handler: EventHandler {
-    fn handle_request<T: CommandType, Output, SM>(
+    fn handle_request<T: CommandType, Output: OutputType, SM>(
         self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,

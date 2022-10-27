@@ -1,8 +1,11 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
-use crate::state::{
-    handler::{EventHandler, Handler},
-    raft_state::RaftState,
+use crate::{
+    data::data_type::OutputType,
+    state::{
+        handler::{EventHandler, Handler},
+        raft_state::RaftState,
+    },
 };
 use crate::{
     data::{
@@ -47,7 +50,7 @@ impl Leader {
             event: persistent_state.insert(
                 self.next_index[&server],
                 1,
-                volitile_state.commit_index,
+                volitile_state.get_commit_index(),
             ),
         }
     }
@@ -79,11 +82,11 @@ impl Leader {
 
 impl Handler for Leader {}
 impl EventHandler for Leader {
-    fn handle<T: CommandType, Output, SM>(
+    fn handle<T: CommandType, Output: OutputType, SM>(
         mut self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-        _state_machine: &mut SM,
+        state_machine: &mut SM,
         sender: u32,
         _term: u32,
         request: Request<T, Output>,
@@ -116,12 +119,18 @@ impl EventHandler for Leader {
                     .filter(|(_, v)| **v >= next_index)
                     .count();
 
-                if matching_servers + 1 > persistent_state.quorum()
-                    && volitile_state.commit_index < next_index
-                {
-                    for _index in volitile_state.commit_index..next_index {}
-                    volitile_state.commit_index = next_index;
-                    println!("{} index committed!", next_index);
+                if matching_servers + 1 > persistent_state.quorum() {
+                    if volitile_state.try_update_commit_index(
+                        state_machine,
+                        persistent_state,
+                        next_index,
+                    ) {
+                        println!(
+                            "Leader {} index committed, value: {:?}!",
+                            next_index,
+                            state_machine.get()
+                        );
+                    }
                 }
                 (Vec::default(), self.into())
             }
@@ -490,7 +499,7 @@ mod tests {
             panic!("Didn't transition to leader!");
         }
         assert!(requests.is_empty());
-        assert_eq!(volitile_state.commit_index, 1);
+        assert_eq!(volitile_state.get_commit_index(), 1);
         assert_eq!(persistent_state.log.len(), 3);
         assert!(log.iter().eq(persistent_state.log[0..2].iter()));
         assert!(Entry {

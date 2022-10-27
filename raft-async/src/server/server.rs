@@ -9,7 +9,7 @@ use rand::Rng;
 
 use crate::{
     data::{
-        data_type::CommandType,
+        data_type::{CommandType, OutputType},
         persistent_state::{Config, PersistentState},
         request::{Crash, Event, Request, Tick},
     },
@@ -32,7 +32,7 @@ fn tick() -> Duration {
     rand::thread_rng().gen_range((AVERAGE_TICK_LENGTH / 2)..(3 * AVERAGE_TICK_LENGTH / 2))
 }
 
-impl<T: CommandType, Output: Send> Server<T, Output>
+impl<T: CommandType, Output: OutputType> Server<T, Output>
 where
     Request<T, Output>: Message,
     PersistentState<T>: Default,
