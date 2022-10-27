@@ -20,10 +20,10 @@ const TICK_TILL_ELECTION: u32 = 25;
 impl Handler for Follower {}
 impl EventHandler for Follower {
     fn handle<T: CommandType, Output, SM>(
-        mut self,
+        self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-        state_machine: &mut SM,
+        _state_machine: &mut SM,
         sender: u32,
         term: u32,
         request: Request<T, Output>,

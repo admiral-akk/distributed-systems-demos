@@ -25,7 +25,7 @@ impl EventHandler for Offline {
         self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-        state_machine: &mut SM,
+        _state_machine: &mut SM,
         _sender: u32,
         _term: u32,
         request: Request<T, Output>,

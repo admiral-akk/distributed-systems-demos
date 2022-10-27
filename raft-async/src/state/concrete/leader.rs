@@ -83,9 +83,9 @@ impl EventHandler for Leader {
         mut self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-        state_machine: &mut SM,
+        _state_machine: &mut SM,
         sender: u32,
-        term: u32,
+        _term: u32,
         request: Request<T, Output>,
     ) -> (Vec<Request<T, Output>>, RaftState)
     where
@@ -119,7 +119,7 @@ impl EventHandler for Leader {
                 if matching_servers + 1 > persistent_state.quorum()
                     && volitile_state.commit_index < next_index
                 {
-                    for index in volitile_state.commit_index..next_index {}
+                    for _index in volitile_state.commit_index..next_index {}
                     volitile_state.commit_index = next_index;
                     println!("{} index committed!", next_index);
                 }

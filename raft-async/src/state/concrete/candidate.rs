@@ -27,7 +27,7 @@ impl EventHandler for Candidate {
         mut self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-        state_machine: &mut SM,
+        _state_machine: &mut SM,
         sender: u32,
         term: u32,
         request: Request<T, Output>,
@@ -418,7 +418,7 @@ mod tests {
         };
         let mut state_machine = Sum::default();
 
-        let (requests, next) = candidate.handle_request(
+        let (_requests, next) = candidate.handle_request(
             &mut volitile_state,
             &mut persistent_state,
             &mut state_machine,
@@ -475,7 +475,7 @@ mod tests {
         };
         let mut state_machine = Sum::default();
 
-        let (requests, next) = candidate.handle_request(
+        let (_requests, next) = candidate.handle_request(
             &mut volitile_state,
             &mut persistent_state,
             &mut state_machine,
@@ -530,7 +530,7 @@ mod tests {
         };
         let mut state_machine = Sum::default();
 
-        let (requests, next) = candidate.handle_request(
+        let (_requests, next) = candidate.handle_request(
             &mut volitile_state,
             &mut persistent_state,
             &mut state_machine,
