@@ -45,19 +45,15 @@ impl Leader {
         persistent_state: &mut PersistentState<T>,
         server: u32,
     ) -> Request<T> {
-        let next_index = self.next_index[&server];
-        let entries = match next_index < persistent_state.log.len() {
-            true => Vec::from(
-                &persistent_state.log
-                    [(next_index)..(next_index + 1).min(persistent_state.log.len())],
-            ),
-            false => Vec::new(),
-        };
         Request {
             sender: persistent_state.id,
             reciever: server,
             term: persistent_state.current_term,
-            event: persistent_state.append(next_index, 1, volitile_state.commit_index),
+            event: persistent_state.append(
+                self.next_index[&server],
+                1,
+                volitile_state.commit_index,
+            ),
         }
     }
 
