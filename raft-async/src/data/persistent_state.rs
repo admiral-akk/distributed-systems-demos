@@ -5,15 +5,37 @@ use super::{
     request::{Event, Insert, Vote},
 };
 
-#[derive(Default)]
+#[derive(Default, Clone, PartialEq)]
 pub struct Config {
     pub servers: HashSet<u32>,
 }
 
 #[derive(Clone, PartialEq)]
+pub enum EntryData<T> {
+    Command(T),
+    Config(Config),
+}
+
+#[derive(Clone, PartialEq)]
 pub struct Entry<T: Clone> {
     pub term: u32,
-    pub command: T,
+    pub data: EntryData<T>,
+}
+
+impl<T: Clone> Entry<T> {
+    pub fn command(term: u32, data: T) -> Self {
+        Entry {
+            term,
+            data: EntryData::Command(data),
+        }
+    }
+
+    pub fn config(term: u32, config: Config) -> Self {
+        Entry {
+            term,
+            data: EntryData::Config(config),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -33,10 +55,7 @@ pub struct LogState {
 
 impl<T: CommandType> PersistentState<T> {
     pub fn push(&mut self, data: T) {
-        self.log.push(Entry {
-            term: self.current_term,
-            command: data,
-        });
+        self.log.push(Entry::command(self.current_term, data));
     }
 
     pub fn insert<Output>(

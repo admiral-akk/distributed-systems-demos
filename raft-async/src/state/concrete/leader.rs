@@ -1,4 +1,4 @@
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
 use crate::{
     data::data_type::OutputType,
@@ -158,16 +158,7 @@ mod tests {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([
-                Entry {
-                    term: 1,
-                    command: 10,
-                },
-                Entry {
-                    term: 3,
-                    command: 4,
-                },
-            ]),
+            log: Vec::from([Entry::command(1, 10), Entry::command(3, 4)]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState {
@@ -223,16 +214,7 @@ mod tests {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([
-                Entry {
-                    term: 1,
-                    command: 10,
-                },
-                Entry {
-                    term: 3,
-                    command: 4,
-                },
-            ]),
+            log: Vec::from([Entry::command(1, 10), Entry::command(3, 4)]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState {
@@ -291,16 +273,7 @@ mod tests {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([
-                Entry {
-                    term: 1,
-                    command: 10,
-                },
-                Entry {
-                    term: 3,
-                    command: 4,
-                },
-            ]),
+            log: Vec::from([Entry::command(1, 10), Entry::command(3, 4)]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState {
@@ -346,16 +319,7 @@ mod tests {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([
-                Entry {
-                    term: 1,
-                    command: 10,
-                },
-                Entry {
-                    term: 3,
-                    command: 4,
-                },
-            ]),
+            log: Vec::from([Entry::command(1, 10), Entry::command(3, 4)]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState {
@@ -401,16 +365,7 @@ mod tests {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([
-                Entry {
-                    term: 1,
-                    command: 10,
-                },
-                Entry {
-                    term: 3,
-                    command: 4,
-                },
-            ]),
+            log: Vec::from([Entry::command(1, 10), Entry::command(3, 4)]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState {
@@ -452,16 +407,7 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
-        let log = Vec::from([
-            Entry {
-                term: 1,
-                command: 10,
-            },
-            Entry {
-                term: 3,
-                command: 4,
-            },
-        ]);
+        let log = Vec::from([Entry::command(1, 10), Entry::command(3, 4)]);
         let mut persistent_state: PersistentState<u32> = PersistentState {
             config,
             id: 1,
@@ -502,10 +448,6 @@ mod tests {
         assert_eq!(volitile_state.get_commit_index(), 1);
         assert_eq!(persistent_state.log.len(), 3);
         assert!(log.iter().eq(persistent_state.log[0..2].iter()));
-        assert!(Entry {
-            term: 3,
-            command: 2
-        }
-        .eq(&persistent_state.log[2]));
+        assert!(Entry::command(3, 2).eq(&persistent_state.log[2]));
     }
 }

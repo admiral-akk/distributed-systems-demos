@@ -66,16 +66,7 @@ mod tests {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([
-                Entry {
-                    term: 1,
-                    command: 10,
-                },
-                Entry {
-                    term: 2,
-                    command: 4,
-                },
-            ]),
+            log: Vec::from([Entry::command(1, 10), Entry::command(2, 4)]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState {
@@ -117,16 +108,7 @@ mod tests {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([
-                Entry {
-                    term: 1,
-                    command: 10,
-                },
-                Entry {
-                    term: 2,
-                    command: 4,
-                },
-            ]),
+            log: Vec::from([Entry::command(1, 10), Entry::command(2, 4)]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState {

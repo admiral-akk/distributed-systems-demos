@@ -1,6 +1,9 @@
 use crate::state::state::StateMachine;
 
-use super::{data_type::CommandType, persistent_state::PersistentState};
+use super::{
+    data_type::CommandType,
+    persistent_state::{EntryData, PersistentState},
+};
 
 #[derive(Default, Clone, Copy)]
 pub struct VolitileState {
@@ -23,7 +26,12 @@ impl VolitileState {
             return false;
         }
         for index in self.commit_index..new_commit_index {
-            state_machine.apply(persistent_state.log[index].command.clone());
+            match &persistent_state.log[index].data {
+                EntryData::Command(command) => {
+                    state_machine.apply(command.clone());
+                }
+                _ => {}
+            }
         }
         self.commit_index = new_commit_index;
         true

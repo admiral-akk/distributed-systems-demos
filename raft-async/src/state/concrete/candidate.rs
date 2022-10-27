@@ -115,20 +115,13 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2]),
         };
+        let log = Vec::from([Entry::command(1, 10), Entry::command(3, 4)]);
+
         let mut persistent_state: PersistentState<u32> = PersistentState {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([
-                Entry {
-                    term: 1,
-                    command: 10,
-                },
-                Entry {
-                    term: 3,
-                    command: 4,
-                },
-            ]),
+            log,
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
@@ -176,20 +169,13 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
+        let log = Vec::from([Entry::command(1, 10), Entry::command(3, 4)]);
+
         let mut persistent_state: PersistentState<u32> = PersistentState {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([
-                Entry {
-                    term: 1,
-                    command: 10,
-                },
-                Entry {
-                    term: 3,
-                    command: 4,
-                },
-            ]),
+            log,
             ..Default::default()
         };
         let mut volitile_state = VolitileState {
@@ -243,20 +229,13 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
+        let log = Vec::from([Entry::command(1, 10), Entry::command(3, 4)]);
+
         let mut persistent_state: PersistentState<u32> = PersistentState {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([
-                Entry {
-                    term: 1,
-                    command: 10,
-                },
-                Entry {
-                    term: 3,
-                    command: 4,
-                },
-            ]),
+            log,
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
@@ -292,20 +271,13 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
+        let log = Vec::from([Entry::command(1, 10), Entry::command(3, 4)]);
+
         let mut persistent_state: PersistentState<u32> = PersistentState {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([
-                Entry {
-                    term: 1,
-                    command: 10,
-                },
-                Entry {
-                    term: 3,
-                    command: 4,
-                },
-            ]),
+            log,
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
@@ -341,20 +313,13 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
+        let log = Vec::from([Entry::command(1, 10), Entry::command(3, 4)]);
+
         let mut persistent_state: PersistentState<u32> = PersistentState {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([
-                Entry {
-                    term: 1,
-                    command: 10,
-                },
-                Entry {
-                    term: 3,
-                    command: 4,
-                },
-            ]),
+            log,
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
@@ -390,20 +355,13 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
+        let log = Vec::from([Entry::command(1, 10), Entry::command(3, 4)]);
+
         let mut persistent_state: PersistentState<u32> = PersistentState {
             config,
             id: 1,
             current_term: 3,
-            log: Vec::from([
-                Entry {
-                    term: 1,
-                    command: 10,
-                },
-                Entry {
-                    term: 3,
-                    command: 4,
-                },
-            ]),
+            log,
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
@@ -438,16 +396,8 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
-        let log = Vec::from([
-            Entry {
-                term: 1,
-                command: 10,
-            },
-            Entry {
-                term: 3,
-                command: 4,
-            },
-        ]);
+        let log = Vec::from([Entry::command(1, 10), Entry::command(3, 4)]);
+
         let mut persistent_state: PersistentState<u32> = PersistentState {
             config,
             id: 1,
@@ -459,10 +409,7 @@ mod tests {
         let candidate = Candidate {
             votes: HashSet::from([0]),
         };
-        let entries = Vec::from([Entry {
-            term: 4,
-            command: 5,
-        }]);
+        let entries = Vec::from([Entry::command(4, 5)]);
         let request: Request<u32, u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
@@ -493,16 +440,7 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
-        let log = Vec::from([
-            Entry {
-                term: 1,
-                command: 10,
-            },
-            Entry {
-                term: 3,
-                command: 4,
-            },
-        ]);
+        let log = Vec::from([Entry::command(1, 10), Entry::command(3, 4)]);
         let mut persistent_state: PersistentState<u32> = PersistentState {
             config,
             id: 1,
@@ -514,10 +452,7 @@ mod tests {
         let candidate = Candidate {
             votes: HashSet::from([0]),
         };
-        let entries = Vec::from([Entry {
-            term: 4,
-            command: 5,
-        }]);
+        let entries = Vec::from([Entry::command(4, 5)]);
         let request: Request<u32, u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
