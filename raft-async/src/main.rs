@@ -62,28 +62,4 @@ fn main() {
             task::sleep(Duration::from_secs(100)).await
         }
     }));
-
-    // let servers = (0..5)
-    //     .map(|i| RaftServer::<u32>::new(i))
-    //     .collect::<Vec<_>>();
-    // for i in 0..5 {
-    //     for j in 0..5 {
-    //         if i == j {
-    //             continue;
-    //         }
-    //         let mut c1 = task::block_on(async { servers[i].output.lock().await });
-    //         let mut c2 = task::block_on(async { servers[j].input.lock().await });
-    //         c1.register_socket(&mut c2);
-    //     }
-    // }
-
-    // let mut joins = Vec::new();
-    // for mut server in servers {
-    //     joins.push(task::spawn(async move {
-    //         server.start().await;
-    //     }));
-    // }
-    // for join in joins {
-    //     task::block_on(join);
-    // }
 }
