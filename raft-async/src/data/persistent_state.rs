@@ -26,6 +26,7 @@ pub struct PersistentState<T: Clone> {
     pub keep_alive: u32,
 }
 
+#[derive(PartialEq)]
 pub struct LogState {
     pub term: u32,
     pub length: usize,
@@ -45,23 +46,51 @@ impl<T: CommandType> PersistentState<T> {
             false => Vec::new(),
         };
         Event::Append(Append {
-            prev_log_state: self.log_state_at(index),
+            prev_log_state: self.log_state_at(index).unwrap(),
             entries,
             leader_commit: commit_index,
         })
     }
 
-    pub fn log_state(&self) -> LogState {
-        self.log_state_at(self.log.len())
+    pub fn try_append(&mut self, event: Append<T>) -> bool {
+        let log_state = self.log_state_at(event.prev_log_state.length);
+
+        // If we don't have an entry at the prev_index, or if the terms don't match, we fail.
+        if log_state.is_none() {
+            return false;
+        } else if !log_state.unwrap().eq(&event.prev_log_state) {
+            return false;
+        }
+        for (index, entry) in event.entries.into_iter().enumerate() {
+            let log_index = event.prev_log_state.length + index;
+            if self.log.len() > log_index {
+                if self.log[log_index].term != entry.term {
+                    self.log.drain(log_index..self.log.len());
+                }
+            }
+            if self.log.len() > log_index {
+                self.log[log_index] = entry;
+            } else {
+                self.log.push(entry);
+            }
+        }
+        true
     }
 
-    pub fn log_state_at(&self, length: usize) -> LogState {
-        LogState {
-            term: match length {
-                0 => 0,
-                length => self.log[length - 1].term,
-            },
-            length,
+    pub fn log_state(&self) -> LogState {
+        self.log_state_at(self.log.len()).unwrap()
+    }
+
+    pub fn log_state_at(&self, length: usize) -> Option<LogState> {
+        match length > self.log.len() {
+            true => None,
+            false => Some(LogState {
+                term: match length {
+                    0 => 0,
+                    length => self.log[length - 1].term,
+                },
+                length,
+            }),
         }
     }
 

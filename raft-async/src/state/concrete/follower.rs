@@ -89,46 +89,19 @@ impl<T: CommandType> EventHandler<Append<T>, T> for Follower {
         term: u32,
         event: Append<T>,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
-        let mut success = true;
-        success &= persistent_state.current_term <= term;
+        let mut success = persistent_state.current_term <= term;
         if success {
             // We have a valid leader.
             persistent_state.keep_alive += 1;
             persistent_state.voted_for = Some(sender);
         }
-        // If we don't have the previous entry, then the append fails.
-        success &= persistent_state.log.len() >= event.prev_log_state.length;
-        if success && event.prev_log_state.length > 0 {
-            // If we have a previous entry, then the term needs to match.
-            success &= persistent_state.log[event.prev_log_state.length - 1].term
-                == event.prev_log_state.term;
-        }
-
-        let entry_len = event.entries.len();
+        let max_commit_index = event.max_commit_index();
         if success {
-            for (index, entry) in event.entries.into_iter().enumerate() {
-                let log_index = event.prev_log_state.length + index;
-                if persistent_state.log.len() > log_index {
-                    if persistent_state.log[log_index].term != entry.term {
-                        persistent_state
-                            .log
-                            .drain(log_index..persistent_state.log.len());
-                    }
-                }
-                if persistent_state.log.len() > log_index {
-                    persistent_state.log[log_index] = entry;
-                } else {
-                    persistent_state.log.push(entry);
-                }
-            }
+            success = persistent_state.try_append(event);
         }
 
-        if event.leader_commit > volitile_state.commit_index {
-            if success {
-                volitile_state.commit_index = event
-                    .leader_commit
-                    .min(event.prev_log_state.length + entry_len);
-            }
+        if success {
+            volitile_state.commit_index = max_commit_index.max(volitile_state.commit_index);
         }
 
         (

@@ -43,6 +43,13 @@ pub struct Append<T: CommandType> {
     pub entries: Vec<Entry<T>>,
     pub leader_commit: usize,
 }
+impl<T: CommandType> Append<T> {
+    pub fn max_commit_index(&self) -> usize {
+        self.leader_commit
+            .min(self.prev_log_state.length + self.entries.len())
+    }
+}
+
 pub struct AppendResponse {
     pub success: bool,
 }

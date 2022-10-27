@@ -136,8 +136,10 @@ impl<T: CommandType> EventHandler<AppendResponse, T> for Leader {
             .filter(|(_, v)| **v >= next_index)
             .count();
 
-        if matching_servers + 1 > persistent_state.quorum() {
-            volitile_state.commit_index = next_index.max(volitile_state.commit_index);
+        if matching_servers + 1 > persistent_state.quorum()
+            && volitile_state.commit_index < next_index
+        {
+            volitile_state.commit_index = next_index;
             println!("{} index committed!", next_index);
         }
         (Vec::default(), None)
