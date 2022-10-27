@@ -4,12 +4,13 @@ use crate::data::{
     data_type::CommandType,
     persistent_state::PersistentState,
     request::{
-        Client, ClientResponse, Crash, Insert, InsertResponse, Request, Tick, Vote, VoteResponse,
+        self, Client, ClientResponse, Crash, Event, Insert, InsertResponse, Request, Tick, Vote,
+        VoteResponse,
     },
     volitile_state::VolitileState,
 };
 use crate::state::{
-    handler::{EventHandler, Handler, TimeoutHandler},
+    handler::{EventHandler, Handler},
     raft_state::RaftState,
 };
 
@@ -18,12 +19,6 @@ use super::{candidate::Candidate, offline::Offline};
 pub struct Leader {
     pub next_index: HashMap<u32, usize>,
     pub match_index: HashMap<u32, usize>,
-}
-
-impl TimeoutHandler for Leader {
-    fn timeout_length(&self) -> Duration {
-        Duration::from_millis(150)
-    }
 }
 
 impl Leader {
@@ -61,7 +56,7 @@ impl Leader {
         _candidate: &Candidate,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
+    ) -> (Vec<Request<T>>, RaftState) {
         persistent_state.current_term += 1;
         volitile_state.tick_since_start = 0;
         println!("{} elected leader!", persistent_state.id);
@@ -78,83 +73,55 @@ impl Leader {
                 .collect(),
         };
         let heartbeat = leader.send_heartbeat(volitile_state, persistent_state);
-        (heartbeat, Some(leader.into()))
+        (heartbeat, leader.into())
     }
 }
 
-impl<T: CommandType> Handler<T> for Leader {}
-impl<T: CommandType> EventHandler<Crash, T> for Leader {
-    fn handle_event(
-        &mut self,
-        _volitile_state: &mut VolitileState,
-        _persistent_state: &mut PersistentState<T>,
-        _sender: u32,
-        _term: u32,
-        _event: Crash,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
-        (Vec::default(), Some(RaftState::Offline(Offline {})))
-    }
-}
-impl<T: CommandType> EventHandler<Vote, T> for Leader {}
-impl<T: CommandType> EventHandler<Client<T>, T> for Leader {
-    fn handle_event(
-        &mut self,
-        _volitile_state: &mut VolitileState,
-        persistent_state: &mut PersistentState<T>,
-        _sender: u32,
-        _term: u32,
-        event: Client<T>,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
-        persistent_state.push(event.data);
-        (Vec::new(), None)
-    }
-}
-impl<T: CommandType> EventHandler<ClientResponse<T>, T> for Leader {}
-impl<T: CommandType> EventHandler<VoteResponse, T> for Leader {}
-impl<T: CommandType> EventHandler<Tick, T> for Leader {
-    fn handle_event(
-        &mut self,
-        volitile_state: &mut VolitileState,
-        persistent_state: &mut PersistentState<T>,
-        _sender: u32,
-        _term: u32,
-        _event: Tick,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
-        (self.send_heartbeat(volitile_state, persistent_state), None)
-    }
-}
-impl<T: CommandType> EventHandler<Insert<T>, T> for Leader {}
-impl<T: CommandType> EventHandler<InsertResponse, T> for Leader {
-    fn handle_event(
-        &mut self,
+impl Handler for Leader {}
+impl EventHandler for Leader {
+    fn handle<T: CommandType>(
+        mut self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         sender: u32,
-        _term: u32,
-        event: InsertResponse,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
-        let next_index = self.next_index[&sender];
-        if event.success {
-            if next_index < persistent_state.log.len() {
-                self.next_index.insert(sender, next_index + 1);
+        term: u32,
+        request: Request<T>,
+    ) -> (Vec<Request<T>>, RaftState) {
+        match request.event {
+            Event::Client(Client { data }) => {
+                persistent_state.push(data);
+                (Vec::new(), self.into())
             }
-            self.match_index.insert(sender, self.next_index[&sender]);
-        } else if next_index > 0 {
-            self.next_index.insert(sender, next_index - 1);
-        }
-        let matching_servers = self
-            .match_index
-            .iter()
-            .filter(|(_, v)| **v >= next_index)
-            .count();
+            Event::Tick(Tick) => (
+                self.send_heartbeat(volitile_state, persistent_state),
+                self.into(),
+            ),
+            Event::InsertResponse(InsertResponse { success }) => {
+                let next_index = self.next_index[&sender];
+                if success {
+                    if next_index < persistent_state.log.len() {
+                        self.next_index.insert(sender, next_index + 1);
+                    }
+                    self.match_index.insert(sender, self.next_index[&sender]);
+                } else if next_index > 0 {
+                    self.next_index.insert(sender, next_index - 1);
+                }
+                let matching_servers = self
+                    .match_index
+                    .iter()
+                    .filter(|(_, v)| **v >= next_index)
+                    .count();
 
-        if matching_servers + 1 > persistent_state.quorum()
-            && volitile_state.commit_index < next_index
-        {
-            volitile_state.commit_index = next_index;
-            println!("{} index committed!", next_index);
+                if matching_servers + 1 > persistent_state.quorum()
+                    && volitile_state.commit_index < next_index
+                {
+                    volitile_state.commit_index = next_index;
+                    println!("{} index committed!", next_index);
+                }
+                (Vec::default(), self.into())
+            }
+            _ => (Vec::default(), self.into()),
         }
-        (Vec::default(), None)
     }
 }
 
@@ -199,11 +166,10 @@ mod tests {
             &mut persistent_state,
         );
 
-        assert!(next.is_some());
-        if let Some(RaftState::Leader(Leader {
+        if let RaftState::Leader(Leader {
             next_index,
             match_index,
-        })) = next
+        }) = next
         {
             for (_, v) in next_index {
                 assert_eq!(v, persistent_state.log.len());
@@ -234,7 +200,7 @@ mod tests {
     }
 
     #[test]
-    fn test_timeout() {
+    fn test_tick() {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
@@ -272,8 +238,11 @@ mod tests {
         let (requests, next) =
             leader.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert_eq!(volitile_state.tick_since_start, 0);
-        assert!(next.is_none());
+        assert_eq!(volitile_state.tick_since_start, 1);
+        if let RaftState::Leader(_) = next {
+        } else {
+            panic!("Didn't transition to leader!");
+        }
         assert!(requests.len() == 4);
         for request in requests {
             assert!(request.sender == persistent_state.id);
@@ -332,10 +301,13 @@ mod tests {
         let (requests, next) =
             leader.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert!(next.is_none());
+        if let RaftState::Leader(leader) = next {
+            assert_eq!(leader.next_index[&4], 2);
+            assert_eq!(leader.match_index[&4], 2);
+        } else {
+            panic!("Didn't transition to leader!");
+        }
         assert!(requests.is_empty());
-        assert_eq!(leader.next_index[&4], 2);
-        assert_eq!(leader.match_index[&4], 2);
     }
 
     #[test]
@@ -378,10 +350,13 @@ mod tests {
         let (requests, next) =
             leader.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert!(next.is_none());
+        if let RaftState::Leader(leader) = next {
+            assert_eq!(leader.next_index[&0], 2);
+            assert_eq!(leader.match_index[&0], 2);
+        } else {
+            panic!("Didn't transition to leader!");
+        }
         assert!(requests.is_empty());
-        assert_eq!(leader.next_index[&0], 2);
-        assert_eq!(leader.match_index[&0], 2);
     }
 
     #[test]
@@ -424,10 +399,13 @@ mod tests {
         let (requests, next) =
             leader.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert!(next.is_none());
+        if let RaftState::Leader(leader) = next {
+            assert_eq!(leader.next_index[&0], 1);
+            assert_eq!(leader.match_index[&0], 0);
+        } else {
+            panic!("Didn't transition to leader!");
+        }
         assert!(requests.is_empty());
-        assert_eq!(leader.next_index[&0], 1);
-        assert_eq!(leader.match_index[&0], 0);
     }
 
     #[test]
@@ -471,7 +449,10 @@ mod tests {
         let (requests, next) =
             leader.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert!(next.is_none());
+        if let RaftState::Leader(_) = next {
+        } else {
+            panic!("Didn't transition to leader!");
+        }
         assert!(requests.is_empty());
         assert_eq!(volitile_state.commit_index, 1);
         assert_eq!(persistent_state.log.len(), 3);

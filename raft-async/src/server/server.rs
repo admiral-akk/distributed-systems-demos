@@ -92,10 +92,11 @@ where
                 servers: HashSet::from([0, 1, 2, 3, 4]),
             },
         );
+        let mut responses;
         loop {
             let request = server.input.recv().await;
             if let Ok(request) = request {
-                let responses = state.handle_request(request);
+                (state, responses) = state.handle_request(request);
                 for response in responses {
                     server.output.send(response).await;
                 }

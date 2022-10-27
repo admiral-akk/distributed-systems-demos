@@ -1,5 +1,3 @@
-
-
 use crate::data::{
     data_type::CommandType, persistent_state::PersistentState, request::Request,
     volitile_state::VolitileState,
@@ -7,7 +5,7 @@ use crate::data::{
 
 use super::{
     concrete::{candidate::Candidate, follower::Follower, leader::Leader, offline::Offline},
-    handler::{Handler},
+    handler::Handler,
 };
 pub enum RaftState {
     Offline(Offline),
@@ -46,11 +44,11 @@ impl From<Candidate> for RaftState {
 
 impl RaftState {
     pub fn handle_request<T: CommandType>(
-        &mut self,
+        mut self,
         request: Request<T>,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-    ) -> (Vec<Request<T>>, Option<Self>) {
+    ) -> (Vec<Request<T>>, Self) {
         match self {
             RaftState::Offline(state) => {
                 state.handle_request(volitile_state, persistent_state, request)

@@ -11,7 +11,7 @@ use crate::{
         volitile_state::VolitileState,
     },
     state::{
-        handler::{EventHandler, Handler, TimeoutHandler},
+        handler::{EventHandler, Handler},
         raft_state::RaftState,
     },
 };
@@ -20,133 +20,83 @@ use super::{candidate::Candidate, offline::Offline};
 
 #[derive(Default)]
 pub struct Follower {}
-
-impl TimeoutHandler for Follower {
-    fn timeout_length(&self) -> Duration {
-        Duration::from_millis(1000)
-    }
-}
-
 const TICK_TILL_ELECTION: u32 = 25;
-
-impl<T: CommandType> EventHandler<InsertResponse, T> for Follower {}
-impl<T: CommandType> EventHandler<Tick, T> for Follower {
-    fn handle_event(
-        &mut self,
-        volitile_state: &mut VolitileState,
-        persistent_state: &mut PersistentState<T>,
-        _sender: u32,
-        _term: u32,
-        _event: Tick,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
-        volitile_state.tick_since_start += 1;
-        if volitile_state.tick_since_start < TICK_TILL_ELECTION {
-            return Default::default();
-        }
-        Candidate::call_election(volitile_state, persistent_state)
-    }
-}
-impl<T: CommandType> EventHandler<VoteResponse, T> for Follower {}
-impl<T: CommandType> EventHandler<Vote, T> for Follower {
-    fn handle_event(
-        &mut self,
-        _volitile_state: &mut VolitileState,
-        persistent_state: &mut PersistentState<T>,
-        sender: u32,
-        term: u32,
-        event: Vote,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
-        println!("{} requested vote from {}", sender, persistent_state.id);
-        let mut success = persistent_state.current_term <= term;
-        if success {
-            success &= persistent_state.try_vote_for(event, sender);
-        }
-        (
-            Vec::from([Request {
-                sender: persistent_state.id,
-                reciever: sender,
-                term: persistent_state.current_term,
-                event: Event::VoteResponse(VoteResponse { success }),
-            }]),
-            None,
-        )
-    }
-}
-
-impl<T: CommandType> EventHandler<Insert<T>, T> for Follower {
-    fn handle_event(
-        &mut self,
+impl Handler for Follower {}
+impl EventHandler for Follower {
+    fn handle<T: CommandType>(
+        mut self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         sender: u32,
         term: u32,
-        event: Insert<T>,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
-        let mut success = persistent_state.current_term <= term;
-        if success {
-            // We have a valid leader.
-            volitile_state.tick_since_start = 0;
-            persistent_state.voted_for = Some(sender);
-        }
-        let max_commit_index = event.max_commit_index();
-        if success {
-            success = persistent_state.try_insert(event);
-        }
+        request: Request<T>,
+    ) -> (Vec<Request<T>>, RaftState) {
+        match request.event {
+            Event::Vote(event) => {
+                println!("{} requested vote from {}", sender, persistent_state.id);
+                let mut success = persistent_state.current_term <= term;
+                if success {
+                    success &= persistent_state.try_vote_for(event, sender);
+                }
+                (
+                    Vec::from([Request {
+                        sender: persistent_state.id,
+                        reciever: sender,
+                        term: persistent_state.current_term,
+                        event: Event::VoteResponse(VoteResponse { success }),
+                    }]),
+                    self.into(),
+                )
+            }
+            Event::Tick(Tick) => {
+                if volitile_state.tick_since_start < TICK_TILL_ELECTION {
+                    (Vec::new(), self.into())
+                } else {
+                    Candidate::call_election(volitile_state, persistent_state)
+                }
+            }
+            Event::Insert(event) => {
+                let mut success = persistent_state.current_term <= term;
+                if success {
+                    // We have a valid leader.
+                    volitile_state.tick_since_start = 0;
+                    persistent_state.voted_for = Some(sender);
+                }
+                let max_commit_index = event.max_commit_index();
+                if success {
+                    success = persistent_state.try_insert(event);
+                }
 
-        if success {
-            volitile_state.commit_index = max_commit_index.max(volitile_state.commit_index);
-        }
+                if success {
+                    volitile_state.commit_index = max_commit_index.max(volitile_state.commit_index);
+                }
 
-        (
-            Vec::from([Request {
-                sender: persistent_state.id,
-                reciever: sender,
-                term: persistent_state.current_term,
-                event: Event::InsertResponse(InsertResponse { success }),
-            }]),
-            None,
-        )
+                (
+                    Vec::from([Request {
+                        sender: persistent_state.id,
+                        reciever: sender,
+                        term: persistent_state.current_term,
+                        event: Event::InsertResponse(InsertResponse { success }),
+                    }]),
+                    self.into(),
+                )
+            }
+            Event::Client(event) => (
+                Vec::from([Request {
+                    sender: persistent_state.id,
+                    reciever: sender,
+                    term: 0,
+                    event: Event::ClientResponse(ClientResponse::Failed {
+                        leader_id: persistent_state.voted_for,
+                        data: event.data,
+                    }),
+                }]),
+                self.into(),
+            ),
+            _ => (Vec::default(), self.into()),
+        }
     }
 }
-
-impl<T: CommandType> Handler<T> for Follower {}
-
-impl<T: CommandType> EventHandler<Crash, T> for Follower {
-    fn handle_event(
-        &mut self,
-        _volitile_state: &mut VolitileState,
-        _persistent_state: &mut PersistentState<T>,
-        _sender: u32,
-        _term: u32,
-        _event: Crash,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
-        (Vec::default(), Some(RaftState::Offline(Offline {})))
-    }
-}
-impl<T: CommandType> EventHandler<Client<T>, T> for Follower {
-    fn handle_event(
-        &mut self,
-        _volitile_state: &mut VolitileState,
-        persistent_state: &mut PersistentState<T>,
-        sender: u32,
-        _term: u32,
-        event: Client<T>,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
-        (
-            Vec::from([Request {
-                sender: persistent_state.id,
-                reciever: sender,
-                term: 0,
-                event: Event::ClientResponse(ClientResponse::Failed {
-                    leader_id: persistent_state.voted_for,
-                    data: event.data,
-                }),
-            }]),
-            None,
-        )
-    }
-}
-impl<T: CommandType> EventHandler<ClientResponse<T>, T> for Follower {}
 
 #[cfg(test)]
 mod tests {
@@ -194,7 +144,10 @@ mod tests {
         let (requests, next) =
             follower.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert!(next.is_none());
+        if let RaftState::Follower(_) = next {
+        } else {
+            panic!("Didn't transition to follower!");
+        }
         assert!(requests.len() == 0);
         assert_eq!(volitile_state.tick_since_start, 1);
     }
@@ -236,8 +189,7 @@ mod tests {
         let (requests, next) =
             follower.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert!(next.is_some());
-        if let Some(RaftState::Candidate(_)) = next {
+        if let RaftState::Candidate(_) = next {
             assert!(persistent_state.current_term == term + 1);
         } else {
             panic!("Didn't transition to candidate!");
@@ -300,7 +252,10 @@ mod tests {
         let (requests, next) =
             follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
 
-        assert!(next.is_none());
+        if let RaftState::Follower(_) = next {
+        } else {
+            panic!("Didn't transition to follower!");
+        }
         assert!(requests.len() == 1);
         assert!(persistent_state.current_term == 6);
         assert_eq!(volitile_state.tick_since_start, 0);
@@ -369,7 +324,10 @@ mod tests {
         let (requests, next) =
             follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
 
-        assert!(next.is_none());
+        if let RaftState::Follower(_) = next {
+        } else {
+            panic!("Didn't transition to follower!");
+        }
         assert!(requests.len() == 1);
         assert!(persistent_state.current_term == 4);
         assert!(persistent_state.voted_for == Some(0));
@@ -431,7 +389,10 @@ mod tests {
         let (requests, next) =
             follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
 
-        assert!(next.is_none());
+        if let RaftState::Follower(_) = next {
+        } else {
+            panic!("Didn't transition to follower!");
+        }
         assert!(requests.len() == 1);
         assert!(persistent_state.current_term == 4);
         assert!(persistent_state.voted_for == Some(0));
@@ -494,7 +455,10 @@ mod tests {
         let (requests, next) =
             follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
 
-        assert!(next.is_none());
+        if let RaftState::Follower(_) = next {
+        } else {
+            panic!("Didn't transition to follower!");
+        }
         assert!(requests.len() == 1);
         assert!(persistent_state.current_term == 4);
         assert!(persistent_state.voted_for == Some(0));
@@ -567,7 +531,10 @@ mod tests {
         let (requests, next) =
             follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
 
-        assert!(next.is_none());
+        if let RaftState::Follower(_) = next {
+        } else {
+            panic!("Didn't transition to follower!");
+        }
         assert!(requests.len() == 1);
         assert!(persistent_state.current_term == 4);
         assert!(persistent_state.voted_for == Some(0));
@@ -635,7 +602,10 @@ mod tests {
         let (requests, next) =
             follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
 
-        assert!(next.is_none());
+        if let RaftState::Follower(_) = next {
+        } else {
+            panic!("Didn't transition to follower!");
+        }
         assert!(requests.len() == 1);
         assert!(persistent_state.current_term == 4);
         assert!(persistent_state.voted_for == None);
@@ -699,7 +669,10 @@ mod tests {
         let (requests, next) =
             follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
 
-        assert!(next.is_none());
+        if let RaftState::Follower(_) = next {
+        } else {
+            panic!("Didn't transition to follower!");
+        }
         assert!(requests.len() == 1);
         assert!(persistent_state.current_term == 4);
         assert!(persistent_state.voted_for == None);
@@ -763,7 +736,10 @@ mod tests {
         let (requests, next) =
             follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
 
-        assert!(next.is_none());
+        if let RaftState::Follower(_) = next {
+        } else {
+            panic!("Didn't transition to follower!");
+        }
         assert!(requests.len() == 1);
         assert!(persistent_state.current_term == 4);
         assert!(persistent_state.voted_for == None);
@@ -827,7 +803,10 @@ mod tests {
         let (requests, next) =
             follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
 
-        assert!(next.is_none());
+        if let RaftState::Follower(_) = next {
+        } else {
+            panic!("Didn't transition to follower!");
+        }
         assert!(requests.len() == 1);
         assert!(persistent_state.current_term == 4);
         assert!(persistent_state.voted_for == Some(2));
@@ -891,7 +870,10 @@ mod tests {
         let (requests, next) =
             follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
 
-        assert!(next.is_none());
+        if let RaftState::Follower(_) = next {
+        } else {
+            panic!("Didn't transition to follower!");
+        }
         assert!(requests.len() == 1);
         assert!(persistent_state.current_term == 4);
         assert!(persistent_state.voted_for == Some(2));
@@ -949,7 +931,10 @@ mod tests {
         let (requests, next) =
             follower.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert!(next.is_none());
+        if let RaftState::Follower(_) = next {
+        } else {
+            panic!("Didn't transition to follower!");
+        }
         assert_eq!(requests.len(), 1);
         for request in requests {
             assert_eq!(request.sender, persistent_state.id);
@@ -1008,7 +993,10 @@ mod tests {
         let (requests, next) =
             follower.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert!(next.is_none());
+        if let RaftState::Follower(_) = next {
+        } else {
+            panic!("Didn't transition to follower!");
+        }
         assert_eq!(requests.len(), 1);
         for request in requests {
             assert_eq!(request.sender, persistent_state.id);

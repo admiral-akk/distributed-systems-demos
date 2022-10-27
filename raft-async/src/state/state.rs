@@ -31,7 +31,7 @@ impl<T: CommandType> State<T> {
         }
     }
 
-    pub fn handle_request(&mut self, request: Request<T>) -> Vec<Request<T>> {
+    pub fn handle_request(mut self, request: Request<T>) -> (Self, Vec<Request<T>>) {
         // Todo: Maybe find better place to put this, since State shouldn't be aware of how each state updates.
         match self.raft_state {
             RaftState::Offline(_) => {}
@@ -53,9 +53,7 @@ impl<T: CommandType> State<T> {
             &mut self.volitile_state,
             &mut self.persistent_state,
         );
-        if let Some(next) = next {
-            self.raft_state = next;
-        }
-        responses
+        self.raft_state = next;
+        (self, responses)
     }
 }

@@ -11,7 +11,7 @@ use crate::data::{
     volitile_state::VolitileState,
 };
 use crate::state::{
-    handler::{EventHandler, Handler, TimeoutHandler},
+    handler::{EventHandler, Handler},
     raft_state::RaftState,
 };
 
@@ -19,84 +19,47 @@ use crate::state::{
 pub struct Candidate {
     votes: HashSet<u32>,
 }
-impl TimeoutHandler for Candidate {
-    fn timeout_length(&self) -> Duration {
-        Duration::from_millis(200)
-    }
-}
-
 const TICK_TILL_NEW_ELECTION: u32 = 10;
 
-impl<T: CommandType> Handler<T> for Candidate {}
-
-impl<T: CommandType> EventHandler<Crash, T> for Candidate {
-    fn handle_event(
-        &mut self,
-        _volitile_state: &mut VolitileState,
-        _persistent_state: &mut PersistentState<T>,
-        _sender: u32,
-        _term: u32,
-        _event: Crash,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
-        (Vec::default(), Some(RaftState::Offline(Offline {})))
-    }
-}
-impl<T: CommandType> EventHandler<Vote, T> for Candidate {}
-impl<T: CommandType> EventHandler<Client<T>, T> for Candidate {}
-impl<T: CommandType> EventHandler<ClientResponse<T>, T> for Candidate {}
-impl<T: CommandType> EventHandler<InsertResponse, T> for Candidate {}
-impl<T: CommandType> EventHandler<Tick, T> for Candidate {
-    fn handle_event(
-        &mut self,
-        volitile_state: &mut VolitileState,
-        persistent_state: &mut PersistentState<T>,
-        _sender: u32,
-        _term: u32,
-        _event: Tick,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
-        volitile_state.tick_since_start += 1;
-        if volitile_state.tick_since_start < TICK_TILL_NEW_ELECTION {
-            (Candidate::request_votes(persistent_state), None)
-        } else {
-            Candidate::call_election(volitile_state, persistent_state)
-        }
-    }
-}
-
-impl<T: CommandType> EventHandler<Insert<T>, T> for Candidate {
-    fn handle_event(
-        &mut self,
+impl Handler for Candidate {}
+impl EventHandler for Candidate {
+    fn handle<T: CommandType>(
+        mut self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         sender: u32,
         term: u32,
-        _event: Insert<T>,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
-        if term >= persistent_state.current_term {
-            volitile_state.tick_since_start = 0;
-            persistent_state.voted_for = Some(sender);
-            return (Vec::new(), Some(Follower::default().into()));
+        request: Request<T>,
+    ) -> (Vec<Request<T>>, RaftState) {
+        match request.event {
+            Event::Insert(_) => {
+                if term >= persistent_state.current_term {
+                    volitile_state.tick_since_start = 0;
+                    persistent_state.voted_for = Some(sender);
+                    (Vec::new(), Follower::default().into())
+                } else {
+                    (Vec::default(), self.into())
+                }
+            }
+            Event::Tick(Tick) => {
+                if volitile_state.tick_since_start < TICK_TILL_NEW_ELECTION {
+                    (Candidate::request_votes(persistent_state), self.into())
+                } else {
+                    Candidate::call_election(volitile_state, persistent_state)
+                }
+            }
+            Event::VoteResponse(VoteResponse { success }) => {
+                if success {
+                    println!("{} voted for {}", sender, persistent_state.id);
+                    self.votes.insert(sender);
+                }
+                if self.votes.len() + 1 >= persistent_state.quorum() {
+                    return Leader::from_candidate(&self, volitile_state, persistent_state);
+                }
+                (Vec::default(), self.into())
+            }
+            _ => (Vec::default(), self.into()),
         }
-        (Vec::default(), None)
-    }
-}
-impl<T: CommandType> EventHandler<VoteResponse, T> for Candidate {
-    fn handle_event(
-        &mut self,
-        volitile_state: &mut VolitileState,
-        persistent_state: &mut PersistentState<T>,
-        sender: u32,
-        _term: u32,
-        event: VoteResponse,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
-        if event.success {
-            println!("{} voted for {}", sender, persistent_state.id);
-            self.votes.insert(sender);
-        }
-        if self.votes.len() + 1 >= persistent_state.quorum() {
-            return Leader::from_candidate(&self, volitile_state, persistent_state);
-        }
-        (Vec::default(), None)
     }
 }
 
@@ -118,14 +81,14 @@ impl Candidate {
     pub fn call_election<T: CommandType>(
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
+    ) -> (Vec<Request<T>>, RaftState) {
         println!("{} running for office!", persistent_state.id);
         persistent_state.current_term += 1;
         persistent_state.voted_for = Some(persistent_state.id);
         volitile_state.tick_since_start = 0;
         (
             Candidate::request_votes(persistent_state),
-            Some(Candidate::default().into()),
+            Candidate::default().into(),
         )
     }
 }
@@ -136,6 +99,7 @@ mod tests {
 
     use crate::data::persistent_state::{Config, Entry};
     use crate::data::request;
+    use crate::state::concrete::candidate;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
@@ -174,7 +138,10 @@ mod tests {
         let (requests, next) =
             candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert!(next.is_none());
+        if let RaftState::Candidate(_) = next {
+        } else {
+            panic!("Didn't transition to candidate!");
+        }
         assert!(requests.len() == 2);
         assert_eq!(volitile_state.tick_since_start, 1);
         for request in requests {
@@ -230,9 +197,8 @@ mod tests {
         let (requests, next) =
             candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert!(next.is_some());
         assert_eq!(volitile_state.tick_since_start, 0);
-        if let Some(RaftState::Candidate(Candidate { votes })) = next {
+        if let RaftState::Candidate(Candidate { votes }) = next {
             assert!(votes.is_empty());
             assert!(persistent_state.current_term == 4);
         } else {
@@ -290,10 +256,13 @@ mod tests {
         let (requests, next) =
             candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert!(next.is_none());
+        if let RaftState::Candidate(candidate) = next {
+            assert!(candidate.votes.len() == 0);
+        } else {
+            panic!("Didn't transition to candidate!");
+        }
 
         assert!(requests.len() == 0);
-        assert!(candidate.votes.len() == 0);
     }
 
     #[test]
@@ -331,10 +300,13 @@ mod tests {
         let (requests, next) =
             candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert!(next.is_none());
+        if let RaftState::Candidate(candidate) = next {
+            assert!(candidate.votes.eq(&HashSet::from([0])));
+        } else {
+            panic!("Didn't transition to candidate!");
+        }
 
         assert!(requests.len() == 0);
-        assert!(candidate.votes.eq(&HashSet::from([0])));
     }
 
     #[test]
@@ -372,10 +344,13 @@ mod tests {
         let (requests, next) =
             candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert!(next.is_none());
+        if let RaftState::Candidate(candidate) = next {
+            assert!(candidate.votes.eq(&HashSet::from([0])));
+        } else {
+            panic!("Didn't transition to candidate!");
+        }
 
         assert!(requests.len() == 0);
-        assert!(candidate.votes.eq(&HashSet::from([0])));
     }
 
     #[test]
@@ -413,14 +388,12 @@ mod tests {
         let (_, next) =
             candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert!(next.is_some());
         // We can verify the elected Leader values in the leader tests.
-        if let Some(RaftState::Leader(Leader { .. })) = next {
+        if let RaftState::Leader(_) = next {
         } else {
             panic!("Didn't become a leader!");
         }
         assert_eq!(volitile_state.tick_since_start, 0);
-        assert!(candidate.votes.eq(&HashSet::from([0, 2])));
     }
 
     #[test]
@@ -466,7 +439,10 @@ mod tests {
 
         let (_, next) =
             candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
-        assert!(next.is_none());
+        if let RaftState::Candidate(_) = next {
+        } else {
+            panic!("Failed to transition to follower");
+        }
         assert!(persistent_state.log.iter().eq(log.iter()));
     }
 
@@ -514,8 +490,7 @@ mod tests {
         let (_, next) =
             candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert!(next.is_some());
-        if let Some(RaftState::Follower(_)) = next {
+        if let RaftState::Follower(_) = next {
         } else {
             panic!("Failed to transition to follower");
         }

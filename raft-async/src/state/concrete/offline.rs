@@ -3,8 +3,8 @@ use crate::{
         data_type::CommandType,
         persistent_state::PersistentState,
         request::{
-            Client, ClientResponse, Crash, Insert, InsertResponse, Request, Tick, Vote,
-            VoteResponse,
+            self, Client, ClientResponse, Crash, Event, Insert, InsertResponse, Request, Tick,
+            Vote, VoteResponse,
         },
         volitile_state::VolitileState,
     },
@@ -16,49 +16,34 @@ use crate::{
 
 use super::follower::Follower;
 
-pub struct Offline {}
+pub struct Offline;
 
-impl<T: CommandType> Handler<T> for Offline {}
-impl<T: CommandType> EventHandler<Crash, T> for Offline {
-    fn handle_event(
-        &mut self,
-        _volitile_state: &mut VolitileState,
-        _persistent_state: &mut PersistentState<T>,
-        _sender: u32,
-        _term: u32,
-        _event: Crash,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
-        (Vec::default(), Some(RaftState::Offline(Offline {})))
-    }
-}
-impl<T: CommandType> EventHandler<Insert<T>, T> for Offline {}
-impl<T: CommandType> EventHandler<Client<T>, T> for Offline {}
-impl<T: CommandType> EventHandler<ClientResponse<T>, T> for Offline {}
-impl<T: CommandType> EventHandler<Vote, T> for Offline {}
-impl<T: CommandType> EventHandler<VoteResponse, T> for Offline {}
+impl Handler for Offline {}
 
 const TICK_TO_REBOOT: u32 = 100;
 
-impl<T: CommandType> EventHandler<Tick, T> for Offline {
-    fn handle_event(
-        &mut self,
+impl EventHandler for Offline {
+    fn handle<T: CommandType>(
+        mut self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-        _sender: u32,
-        _term: u32,
-        _event: Tick,
-    ) -> (Vec<Request<T>>, Option<RaftState>) {
-        volitile_state.tick_since_start += 1;
-        if volitile_state.tick_since_start < TICK_TO_REBOOT {
-            return Default::default();
+        sender: u32,
+        term: u32,
+        request: Request<T>,
+    ) -> (Vec<Request<T>>, RaftState) {
+        match request.event {
+            Event::Tick(Tick) => {
+                if volitile_state.tick_since_start < TICK_TO_REBOOT {
+                    return Default::default();
+                }
+                *volitile_state = VolitileState::default();
+                persistent_state.voted_for = None;
+                (Vec::new(), Follower::default().into())
+            }
+            _ => (Vec::default(), self.into()),
         }
-        *volitile_state = VolitileState::default();
-        persistent_state.voted_for = None;
-        (Vec::new(), Some(Follower::default().into()))
     }
 }
-
-impl<T: CommandType> EventHandler<InsertResponse, T> for Offline {}
 
 #[cfg(test)]
 mod tests {
@@ -105,7 +90,10 @@ mod tests {
         let (requests, next) =
             follower.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert!(next.is_none());
+        if let RaftState::Offline(_) = next {
+        } else {
+            panic!("Didn't transition to offline!");
+        }
         assert!(requests.is_empty());
         assert_eq!(persistent_state.voted_for, None);
         assert_eq!(volitile_state.tick_since_start, 1);
@@ -148,8 +136,7 @@ mod tests {
         let (requests, next) =
             follower.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert!(next.is_some());
-        if let Some(RaftState::Follower(_)) = next {
+        if let RaftState::Follower(_) = next {
         } else {
             panic!("Didn't transition to follower!");
         }
