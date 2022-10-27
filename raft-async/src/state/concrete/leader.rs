@@ -4,7 +4,7 @@ use crate::data::{
     data_type::CommandType,
     persistent_state::PersistentState,
     request::{
-        Client, ClientResponse, Event, Insert, InsertResponse, Request, Timeout, Vote, VoteResponse,
+        Client, ClientResponse, Insert, InsertResponse, Request, Timeout, Vote, VoteResponse,
     },
     volitile_state::VolitileState,
 };
@@ -151,7 +151,7 @@ mod tests {
     use std::collections::HashSet;
 
     use crate::data::persistent_state::{Config, Entry};
-    use crate::data::request;
+    use crate::data::request::{self, Event};
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
