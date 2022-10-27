@@ -16,7 +16,7 @@ use crate::{
     state::state::State,
 };
 
-use super::switch::Switch;
+use super::switch::{Message, Switch};
 
 pub struct Server<T: CommandType> {
     pub state: Mutex<State<T>>,
@@ -29,9 +29,10 @@ const SERVER_FAILURE: Duration = Duration::from_millis(10000);
 
 impl<T: CommandType> Server<T>
 where
+    Request<T>: Message,
     PersistentState<T>: Default,
 {
-    pub async fn new(id: u32, switch: Arc<Switch<T>>) -> Self {
+    pub async fn new(id: u32, switch: Arc<Switch<Request<T>>>) -> Self {
         let (output, server_sender, input) = switch.register(id).await;
         Self {
             input,
@@ -46,13 +47,13 @@ where
         }
     }
 
-    pub fn init(server: Arc<Server<T>>) {
+    pub fn init(server: Arc<Self>) {
         task::spawn(Server::random_shutdown(server.clone()));
         task::spawn(Server::request_loop(server.clone()));
         task::spawn(Server::timeout_loop(server.clone()));
     }
 
-    async fn random_shutdown(server: Arc<Server<T>>) {
+    async fn random_shutdown(server: Arc<Self>) {
         loop {
             let timeout = rand::thread_rng().gen_range((SERVER_FAILURE / 2)..(2 * SERVER_FAILURE));
             task::sleep(timeout).await;
@@ -60,7 +61,7 @@ where
         }
     }
 
-    async fn timeout_loop(server: Arc<Server<T>>) {
+    async fn timeout_loop(server: Arc<Self>) {
         loop {
             let (timeout, keep_alive) = {
                 let state = server.state.lock().await;
@@ -91,7 +92,7 @@ where
         }
     }
 
-    async fn request_loop(server: Arc<Server<T>>) {
+    async fn request_loop(server: Arc<Self>) {
         loop {
             let request = server.input.recv().await;
             if let Ok(request) = request {

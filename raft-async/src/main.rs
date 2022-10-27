@@ -3,20 +3,20 @@ use std::time::Duration;
 use async_std::sync::Arc;
 
 use async_std::task;
+use data::request::Request;
 use server::{client::Client, server::Server, switch::Switch};
 
 mod data;
 mod server;
 mod state;
 fn main() {
-    let switch: Arc<Switch<u32>> = Arc::new(Switch::new());
-    Switch::init(switch.clone());
+    let switch: Arc<Switch<Request<u32>>> = Switch::init();
     let servers = (0..5)
         .map(|id| Server::new(id, switch.clone()))
         .map(|server| Arc::new(task::block_on(server)))
         .collect::<Vec<_>>();
     let clients = (10..12)
-        .map(|id| Client::new(id, switch.clone()))
+        .map(|id| Client::<u32>::new(id, switch.clone()))
         .map(|client| Arc::new(task::block_on(client)))
         .collect::<Vec<_>>();
     for server in servers {

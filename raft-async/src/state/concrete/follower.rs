@@ -3,6 +3,7 @@ use std::time::Duration;
 use crate::{
     data::{
         data_type::CommandType,
+        entry,
         persistent_state::PersistentState,
         request::{
             Append, AppendResponse, Client, ClientResponse, Event, Request, Timeout, Vote,
@@ -102,8 +103,9 @@ impl<T: CommandType> EventHandler<Append<T>, T> for Follower {
             success &= persistent_state.log[event.prev_log_length - 1].term == event.prev_log_term;
         }
 
+        let entry_len = event.entries.len();
         if success {
-            for (index, &entry) in event.entries.iter().enumerate() {
+            for (index, entry) in event.entries.into_iter().enumerate() {
                 let log_index = event.prev_log_length + index;
                 if persistent_state.log.len() > log_index {
                     if persistent_state.log[log_index].term != entry.term {
@@ -122,9 +124,8 @@ impl<T: CommandType> EventHandler<Append<T>, T> for Follower {
 
         if event.leader_commit > volitile_state.commit_index {
             if success {
-                volitile_state.commit_index = event
-                    .leader_commit
-                    .min(event.prev_log_length + event.entries.len());
+                volitile_state.commit_index =
+                    event.leader_commit.min(event.prev_log_length + entry_len);
             }
         }
 

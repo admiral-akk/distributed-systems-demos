@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use crate::data::{
     data_type::CommandType,
-    persistent_state::PersistentState,
     request::{self, ClientResponse, Event, Request},
 };
 use async_std::{
@@ -12,9 +11,12 @@ use async_std::{
 };
 use rand::Rng;
 
-use super::switch::Switch;
+use super::switch::{Message, Switch};
 
-pub struct Client<T: CommandType> {
+pub struct Client<T: CommandType>
+where
+    Request<T>: Message,
+{
     pub id: u32,
     pub leader_id: Mutex<u32>,
     pub input: Receiver<Request<T>>,
@@ -24,8 +26,11 @@ pub struct Client<T: CommandType> {
 
 const WAIT: Duration = Duration::from_millis(500);
 
-impl<T: CommandType> Client<T> {
-    pub async fn new(id: u32, switch: Arc<Switch<T>>) -> Self {
+impl<T: CommandType> Client<T>
+where
+    Request<T>: Message,
+{
+    pub async fn new(id: u32, switch: Arc<Switch<Request<T>>>) -> Self {
         let (output, server_sender, input) = switch.register(id).await;
         Self {
             id,

@@ -1,3 +1,5 @@
+use crate::server::switch::{Id, Message};
+
 use super::data_type::CommandType;
 use super::entry::Entry;
 
@@ -7,6 +9,12 @@ pub struct Request<T: CommandType> {
     pub reciever: u32,
     pub term: u32,
     pub event: Event<T>,
+}
+
+impl<T: CommandType> Message for Request<T> {
+    fn recipient(&self) -> Id {
+        Id(self.reciever)
+    }
 }
 
 pub enum Event<T: CommandType> {
