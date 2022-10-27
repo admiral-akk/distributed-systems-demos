@@ -1,6 +1,9 @@
 use std::collections::HashSet;
 
-use super::data_type::CommandType;
+use super::{
+    data_type::CommandType,
+    request::{Append, Event},
+};
 
 #[derive(Default)]
 pub struct Config {
@@ -34,6 +37,18 @@ impl<T: CommandType> PersistentState<T> {
             term: self.current_term,
             command: data,
         });
+    }
+
+    pub fn append(&self, index: usize, max_length: usize, commit_index: usize) -> Event<T> {
+        let entries = match index < self.log.len() {
+            true => Vec::from(&self.log[index..(index + max_length).min(self.log.len())]),
+            false => Vec::new(),
+        };
+        Event::Append(Append {
+            prev_log_state: self.log_state_at(index),
+            entries,
+            leader_commit: commit_index,
+        })
     }
 
     pub fn log_state(&self) -> LogState {

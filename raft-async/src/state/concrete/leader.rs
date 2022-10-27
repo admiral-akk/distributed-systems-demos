@@ -53,16 +53,11 @@ impl Leader {
             ),
             false => Vec::new(),
         };
-        let event = Event::Append(Append {
-            prev_log_state: persistent_state.log_state_at(next_index),
-            entries,
-            leader_commit: volitile_state.commit_index,
-        });
         Request {
             sender: persistent_state.id,
             reciever: server,
             term: persistent_state.current_term,
-            event,
+            event: persistent_state.append(next_index, 1, volitile_state.commit_index),
         }
     }
 
