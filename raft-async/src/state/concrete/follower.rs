@@ -3,7 +3,6 @@ use std::time::Duration;
 use crate::{
     data::{
         data_type::CommandType,
-        entry,
         persistent_state::PersistentState,
         request::{
             Append, AppendResponse, Client, ClientResponse, Event, Request, Timeout, Vote,

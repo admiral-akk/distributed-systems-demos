@@ -24,7 +24,10 @@ impl<T: CommandType> State<T> {
             persistent_state: PersistentState {
                 id,
                 config,
-                ..Default::default()
+                current_term: 0,
+                voted_for: None,
+                log: Vec::new(),
+                keep_alive: 0,
             },
             raft_state: RaftState::default(),
             volitile_state: VolitileState::default(),

@@ -47,7 +47,6 @@ impl Leader {
         server: u32,
     ) -> Request<T> {
         let next_index = self.next_index[&server];
-        // Append at most 10 elements
         let entries = match next_index < persistent_state.log.len() {
             true => Vec::from(
                 &persistent_state.log
@@ -108,15 +107,7 @@ impl<T: CommandType> EventHandler<Client<T>, T> for Leader {
         _term: u32,
         event: Client<T>,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
-        persistent_state.log.push(Entry {
-            term: persistent_state.current_term,
-            command: event.data,
-        });
-        println!(
-            "{} appending entry, index: {}",
-            persistent_state.id,
-            persistent_state.log.len() - 1
-        );
+        persistent_state.push(event.data);
         (Vec::new(), None)
     }
 }

@@ -8,7 +8,7 @@ pub struct Config {
 }
 
 #[derive(Default)]
-pub struct PersistentState<T: CommandType> {
+pub struct PersistentState<T: Clone> {
     pub id: u32,
     pub current_term: u32,
     pub voted_for: Option<u32>,
@@ -18,13 +18,21 @@ pub struct PersistentState<T: CommandType> {
 }
 
 impl<T: CommandType> PersistentState<T> {
-    pub fn prev_term(&self, index: usize) -> u32 {
-        if self.log.is_empty() || index == 0 {
-            0
-        } else if index <= self.log.len() {
-            self.log[index - 1].term
-        } else {
-            self.log.last().unwrap().term
+    pub fn push(&mut self, data: T) {
+        self.log.push(Entry {
+            term: self.current_term,
+            command: data,
+        });
+    }
+
+    pub fn log_term(&self) -> u32 {
+        self.prev_log_term(self.log.len())
+    }
+
+    pub fn prev_log_term(&self, length: usize) -> u32 {
+        match length {
+            0 => 0,
+            length => self.log[length - 1].term,
         }
     }
 

@@ -11,7 +11,7 @@ pub struct Request<T: CommandType> {
     pub event: Event<T>,
 }
 
-impl<T: CommandType> Message for Request<T> {
+impl<T: CommandType + Send> Message for Request<T> {
     fn recipient(&self) -> Id {
         Id(self.reciever)
     }

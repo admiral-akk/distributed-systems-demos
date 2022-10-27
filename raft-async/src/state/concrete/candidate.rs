@@ -96,7 +96,7 @@ impl Candidate {
                 term: persistent_state.current_term,
                 event: Event::Vote(Vote {
                     log_length: persistent_state.log.len(),
-                    last_log_term: persistent_state.prev_term(persistent_state.log.len()),
+                    last_log_term: persistent_state.log_term(),
                 }),
             })
             .collect()
