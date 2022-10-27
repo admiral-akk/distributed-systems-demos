@@ -1,11 +1,12 @@
 use std::{collections::HashSet, time::Duration};
 
-use super::{follower::Follower, leader::Leader};
+use super::{follower::Follower, leader::Leader, offline::Offline};
 use crate::data::{
     data_type::CommandType,
     persistent_state::PersistentState,
     request::{
-        Client, ClientResponse, Event, Insert, InsertResponse, Request, Tick, Vote, VoteResponse,
+        Client, ClientResponse, Crash, Event, Insert, InsertResponse, Request, Tick, Vote,
+        VoteResponse,
     },
     volitile_state::VolitileState,
 };
@@ -27,6 +28,19 @@ impl TimeoutHandler for Candidate {
 const TICK_TILL_NEW_ELECTION: u32 = 10;
 
 impl<T: CommandType> Handler<T> for Candidate {}
+
+impl<T: CommandType> EventHandler<Crash, T> for Candidate {
+    fn handle_event(
+        &mut self,
+        _volitile_state: &mut VolitileState,
+        _persistent_state: &mut PersistentState<T>,
+        _sender: u32,
+        _term: u32,
+        _event: Crash,
+    ) -> (Vec<Request<T>>, Option<RaftState>) {
+        (Vec::default(), Some(RaftState::Offline(Offline {})))
+    }
+}
 impl<T: CommandType> EventHandler<Vote, T> for Candidate {}
 impl<T: CommandType> EventHandler<Client<T>, T> for Candidate {}
 impl<T: CommandType> EventHandler<ClientResponse<T>, T> for Candidate {}

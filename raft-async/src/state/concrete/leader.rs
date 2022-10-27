@@ -3,7 +3,9 @@ use std::{collections::HashMap, time::Duration};
 use crate::data::{
     data_type::CommandType,
     persistent_state::PersistentState,
-    request::{Client, ClientResponse, Insert, InsertResponse, Request, Tick, Vote, VoteResponse},
+    request::{
+        Client, ClientResponse, Crash, Insert, InsertResponse, Request, Tick, Vote, VoteResponse,
+    },
     volitile_state::VolitileState,
 };
 use crate::state::{
@@ -11,7 +13,7 @@ use crate::state::{
     raft_state::RaftState,
 };
 
-use super::candidate::Candidate;
+use super::{candidate::Candidate, offline::Offline};
 
 pub struct Leader {
     pub next_index: HashMap<u32, usize>,
@@ -81,6 +83,18 @@ impl Leader {
 }
 
 impl<T: CommandType> Handler<T> for Leader {}
+impl<T: CommandType> EventHandler<Crash, T> for Leader {
+    fn handle_event(
+        &mut self,
+        _volitile_state: &mut VolitileState,
+        _persistent_state: &mut PersistentState<T>,
+        _sender: u32,
+        _term: u32,
+        _event: Crash,
+    ) -> (Vec<Request<T>>, Option<RaftState>) {
+        (Vec::default(), Some(RaftState::Offline(Offline {})))
+    }
+}
 impl<T: CommandType> EventHandler<Vote, T> for Leader {}
 impl<T: CommandType> EventHandler<Client<T>, T> for Leader {
     fn handle_event(

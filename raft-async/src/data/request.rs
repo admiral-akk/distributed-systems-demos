@@ -24,11 +24,12 @@ pub enum Event<T: CommandType> {
     InsertResponse(InsertResponse),
     Vote(Vote),
     VoteResponse(VoteResponse),
+    Crash(Crash),
     Tick(Tick),
     Client(Client<T>),
     ClientResponse(ClientResponse<T>),
 }
-
+pub struct Crash;
 pub struct Client<T: CommandType> {
     pub data: T,
 }

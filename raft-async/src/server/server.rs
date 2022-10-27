@@ -11,7 +11,7 @@ use crate::{
     data::{
         data_type::CommandType,
         persistent_state::{Config, PersistentState},
-        request::{Event, Request, Tick},
+        request::{Crash, Event, Request, Tick},
     },
     state::state::State,
 };
@@ -19,7 +19,7 @@ use crate::{
 use super::switch::{Id, Message, Switch};
 
 pub struct Server<T: CommandType> {
-    pub state: Mutex<State<T>>,
+    pub id: u32,
     pub input: Receiver<Request<T>>,
     pub output: Sender<Request<T>>,
     pub server_sender: Sender<Request<T>>,
@@ -42,31 +42,34 @@ where
         Self {
             input,
             output,
+            id,
             server_sender,
-            state: Mutex::new(State::new(
-                id,
-                Config {
-                    servers: HashSet::from([0, 1, 2, 3, 4]),
-                },
-            )),
         }
     }
 
     pub fn init(server: Arc<Self>) {
         task::spawn(Server::random_shutdown(server.clone()));
         task::spawn(Server::request_loop(server.clone()));
-        task::spawn(Server::timeout_loop(server.clone()));
+        task::spawn(Server::tick_loop(server.clone()));
     }
 
     async fn random_shutdown(server: Arc<Self>) {
         loop {
             let timeout = rand::thread_rng().gen_range((SERVER_FAILURE / 2)..(2 * SERVER_FAILURE));
             task::sleep(timeout).await;
-            server.state.lock().await.shutdown();
+            server
+                .server_sender
+                .send(Request {
+                    event: Event::Crash(Crash),
+                    sender: 0,
+                    reciever: 0,
+                    term: 0,
+                })
+                .await;
         }
     }
 
-    async fn timeout_loop(server: Arc<Self>) {
+    async fn tick_loop(server: Arc<Self>) {
         loop {
             task::sleep(tick()).await;
             // Check if keep alive has been incremented. If not, then we've timed out.
@@ -83,14 +86,16 @@ where
     }
 
     async fn request_loop(server: Arc<Self>) {
+        let mut state: State<T> = State::new(
+            server.id,
+            Config {
+                servers: HashSet::from([0, 1, 2, 3, 4]),
+            },
+        );
         loop {
             let request = server.input.recv().await;
             if let Ok(request) = request {
-                let responses = {
-                    let mut state = server.state.lock().await;
-                    state.handle_request(request)
-                };
-
+                let responses = state.handle_request(request);
                 for response in responses {
                     server.output.send(response).await;
                 }

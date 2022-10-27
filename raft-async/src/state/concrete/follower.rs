@@ -5,7 +5,7 @@ use crate::{
         data_type::CommandType,
         persistent_state::PersistentState,
         request::{
-            Client, ClientResponse, Event, Insert, InsertResponse, Request, Tick, Vote,
+            Client, ClientResponse, Crash, Event, Insert, InsertResponse, Request, Tick, Vote,
             VoteResponse,
         },
         volitile_state::VolitileState,
@@ -16,7 +16,7 @@ use crate::{
     },
 };
 
-use super::candidate::Candidate;
+use super::{candidate::Candidate, offline::Offline};
 
 #[derive(Default)]
 pub struct Follower {}
@@ -111,6 +111,18 @@ impl<T: CommandType> EventHandler<Insert<T>, T> for Follower {
 
 impl<T: CommandType> Handler<T> for Follower {}
 
+impl<T: CommandType> EventHandler<Crash, T> for Follower {
+    fn handle_event(
+        &mut self,
+        _volitile_state: &mut VolitileState,
+        _persistent_state: &mut PersistentState<T>,
+        _sender: u32,
+        _term: u32,
+        _event: Crash,
+    ) -> (Vec<Request<T>>, Option<RaftState>) {
+        (Vec::default(), Some(RaftState::Offline(Offline {})))
+    }
+}
 impl<T: CommandType> EventHandler<Client<T>, T> for Follower {
     fn handle_event(
         &mut self,

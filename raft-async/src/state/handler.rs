@@ -4,12 +4,13 @@ use crate::data::{
     data_type::CommandType,
     persistent_state::PersistentState,
     request::{
-        Client, ClientResponse, Event, Insert, InsertResponse, Request, Tick, Vote, VoteResponse,
+        Client, ClientResponse, Crash, Event, Insert, InsertResponse, Request, Tick, Vote,
+        VoteResponse,
     },
     volitile_state::VolitileState,
 };
 
-use super::raft_state::RaftState;
+use super::{concrete::offline::Offline, raft_state::RaftState};
 
 pub trait TimeoutHandler {
     fn timeout_length(&self) -> Duration;
@@ -36,6 +37,7 @@ pub trait Handler<T: CommandType>:
     + EventHandler<VoteResponse, T>
     + EventHandler<Client<T>, T>
     + EventHandler<ClientResponse<T>, T>
+    + EventHandler<Crash, T>
 {
     fn handle_request(
         &mut self,
@@ -64,6 +66,9 @@ pub trait Handler<T: CommandType>:
                 self.handle_event(volitile_state, persistent_state, sender, term, event)
             }
             Event::ClientResponse(event) => {
+                self.handle_event(volitile_state, persistent_state, sender, term, event)
+            }
+            Event::Crash(event) => {
                 self.handle_event(volitile_state, persistent_state, sender, term, event)
             }
         }

@@ -1,5 +1,3 @@
-
-
 use crate::{
     data::{
         data_type::CommandType,
@@ -10,7 +8,7 @@ use crate::{
     state::concrete::follower::Follower,
 };
 
-use super::{concrete::offline::Offline, raft_state::RaftState};
+use super::raft_state::RaftState;
 
 pub struct State<T: CommandType> {
     pub persistent_state: PersistentState<T>,
@@ -31,11 +29,6 @@ impl<T: CommandType> State<T> {
             raft_state: RaftState::default(),
             volitile_state: VolitileState::default(),
         }
-    }
-
-    pub fn shutdown(&mut self) {
-        println!("Server {} crashed", self.persistent_state.id);
-        self.raft_state = RaftState::Offline(Offline {});
     }
 
     pub fn handle_request(&mut self, request: Request<T>) -> Vec<Request<T>> {
