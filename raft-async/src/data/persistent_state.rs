@@ -1,8 +1,10 @@
 use std::collections::HashSet;
 
+use crate::server::switch::Id;
+
 use super::{
     data_type::CommandType,
-    request::{Event, Insert},
+    request::{Event, Insert, Vote},
 };
 
 #[derive(Default)]
@@ -74,6 +76,25 @@ impl<T: CommandType> PersistentState<T> {
                 self.log.push(entry);
             }
         }
+        true
+    }
+
+    pub fn try_vote_for(&mut self, event: Vote, id: u32) -> bool {
+        if let Some(voted_for) = self.voted_for {
+            return voted_for == id;
+        }
+
+        let log_state = self.log_state();
+
+        // Candidate log is at least as long as follower log or same length but at least the same term.
+        if log_state.length > event.log_state.length {
+            return false;
+        } else if log_state.length == event.log_state.length
+            && log_state.term > event.log_state.term
+        {
+            return false;
+        }
+        self.voted_for = Some(id);
         true
     }
 

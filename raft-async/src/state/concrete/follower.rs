@@ -51,23 +51,10 @@ impl<T: CommandType> EventHandler<Vote, T> for Follower {
         event: Vote,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         println!("{} requested vote from {}", sender, persistent_state.id);
-        let mut success = true;
-        success &= persistent_state.current_term <= term;
-        if let Some(voted_for) = persistent_state.voted_for {
-            success &= voted_for != sender;
-        }
-        // Candidate log is at least as long as follower log
-        success &= event.log_state.length >= persistent_state.log.len();
-        if event.log_state.length == persistent_state.log.len() && event.log_state.length > 0 {
-            // If they match length, then term of last log entry is at least as large
-            success &=
-                persistent_state.log[event.log_state.length - 1].term <= event.log_state.term;
-        }
-
+        let mut success = persistent_state.current_term <= term;
         if success {
-            persistent_state.voted_for = Some(sender);
+            success &= persistent_state.try_vote_for(event, sender);
         }
-
         (
             Vec::from([Request {
                 sender: persistent_state.id,
