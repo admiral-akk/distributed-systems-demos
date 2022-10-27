@@ -11,7 +11,7 @@ use crate::{
     data::{
         data_type::CommandType,
         persistent_state::{Config, PersistentState},
-        request::{Event, Request, Timeout},
+        request::{Event, Request, Tick},
     },
     state::state::State,
 };
@@ -26,6 +26,11 @@ pub struct Server<T: CommandType> {
 }
 
 const SERVER_FAILURE: Duration = Duration::from_millis(10000);
+
+const AVERAGE_TICK_LENGTH: Duration = Duration::from_millis(50);
+fn tick() -> Duration {
+    rand::thread_rng().gen_range((AVERAGE_TICK_LENGTH / 2)..(3 * AVERAGE_TICK_LENGTH / 2))
+}
 
 impl<T: CommandType> Server<T>
 where
@@ -63,32 +68,17 @@ where
 
     async fn timeout_loop(server: Arc<Self>) {
         loop {
-            let (timeout, keep_alive) = {
-                let state = server.state.lock().await;
-                let timeout = state.timeout_length();
-                (
-                    rand::thread_rng().gen_range(timeout..(2 * timeout)),
-                    state.persistent_state.keep_alive,
-                )
-            };
-            task::sleep(timeout).await;
+            task::sleep(tick()).await;
             // Check if keep alive has been incremented. If not, then we've timed out.
-
-            let timed_out = {
-                let state = server.state.lock().await;
-                state.persistent_state.keep_alive == keep_alive
-            };
-            if timed_out {
-                server
-                    .server_sender
-                    .send(Request {
-                        event: Event::Timeout(Timeout),
-                        sender: 0,
-                        reciever: 0,
-                        term: 0,
-                    })
-                    .await;
-            }
+            server
+                .server_sender
+                .send(Request {
+                    event: Event::Tick(Tick),
+                    sender: 0,
+                    reciever: 0,
+                    term: 0,
+                })
+                .await;
         }
     }
 

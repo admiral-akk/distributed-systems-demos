@@ -3,9 +3,7 @@ use std::{collections::HashMap, time::Duration};
 use crate::data::{
     data_type::CommandType,
     persistent_state::PersistentState,
-    request::{
-        Client, ClientResponse, Insert, InsertResponse, Request, Timeout, Vote, VoteResponse,
-    },
+    request::{Client, ClientResponse, Insert, InsertResponse, Request, Tick, Vote, VoteResponse},
     volitile_state::VolitileState,
 };
 use crate::state::{
@@ -63,7 +61,7 @@ impl Leader {
         persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         persistent_state.current_term += 1;
-        persistent_state.keep_alive += 1;
+        volitile_state.tick_since_start = 0;
         println!("{} elected leader!", persistent_state.id);
         let leader = Leader {
             next_index: persistent_state
@@ -99,14 +97,14 @@ impl<T: CommandType> EventHandler<Client<T>, T> for Leader {
 }
 impl<T: CommandType> EventHandler<ClientResponse<T>, T> for Leader {}
 impl<T: CommandType> EventHandler<VoteResponse, T> for Leader {}
-impl<T: CommandType> EventHandler<Timeout, T> for Leader {
+impl<T: CommandType> EventHandler<Tick, T> for Leader {
     fn handle_event(
         &mut self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         _sender: u32,
         _term: u32,
-        _event: Timeout,
+        _event: Tick,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         (self.send_heartbeat(volitile_state, persistent_state), None)
     }
@@ -176,7 +174,10 @@ mod tests {
             ]),
             ..Default::default()
         };
-        let mut volitile_state = VolitileState { commit_index: 1 };
+        let mut volitile_state = VolitileState {
+            commit_index: 1,
+            tick_since_start: 10,
+        };
 
         let (requests, next) = Leader::from_candidate(
             &Candidate::default(),
@@ -199,7 +200,7 @@ mod tests {
         } else {
             panic!("Transitioned to non-leader state!");
         }
-        assert_eq!(persistent_state.keep_alive, 1);
+        assert_eq!(volitile_state.tick_since_start, 0);
         assert!(requests.len() == 4);
         for request in requests {
             assert!(request.sender == persistent_state.id);
@@ -239,12 +240,15 @@ mod tests {
             ]),
             ..Default::default()
         };
-        let mut volitile_state = VolitileState { commit_index: 1 };
+        let mut volitile_state = VolitileState {
+            commit_index: 1,
+            tick_since_start: 0,
+        };
         let request: Request<u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
             term: 0,
-            event: Event::Timeout(request::Timeout),
+            event: Event::Tick(request::Tick),
         };
         let mut leader = Leader {
             next_index: HashMap::from([(0, 2), (2, 2), (3, 2), (4, 2)]),
@@ -254,7 +258,7 @@ mod tests {
         let (requests, next) =
             leader.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert_eq!(persistent_state.keep_alive, 0);
+        assert_eq!(volitile_state.tick_since_start, 0);
         assert!(next.is_none());
         assert!(requests.len() == 4);
         for request in requests {
@@ -295,7 +299,10 @@ mod tests {
             ]),
             ..Default::default()
         };
-        let mut volitile_state = VolitileState { commit_index: 2 };
+        let mut volitile_state = VolitileState {
+            commit_index: 2,
+            ..Default::default()
+        };
         let request: Request<u32> = Request {
             sender: 4,
             reciever: persistent_state.id,
@@ -311,7 +318,6 @@ mod tests {
         let (requests, next) =
             leader.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert_eq!(persistent_state.keep_alive, 0);
         assert!(next.is_none());
         assert!(requests.is_empty());
         assert_eq!(leader.next_index[&4], 2);
@@ -339,7 +345,10 @@ mod tests {
             ]),
             ..Default::default()
         };
-        let mut volitile_state = VolitileState { commit_index: 1 };
+        let mut volitile_state = VolitileState {
+            commit_index: 1,
+            ..Default::default()
+        };
         let request: Request<u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
@@ -355,7 +364,6 @@ mod tests {
         let (requests, next) =
             leader.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert_eq!(persistent_state.keep_alive, 0);
         assert!(next.is_none());
         assert!(requests.is_empty());
         assert_eq!(leader.next_index[&0], 2);
@@ -383,7 +391,10 @@ mod tests {
             ]),
             ..Default::default()
         };
-        let mut volitile_state = VolitileState { commit_index: 1 };
+        let mut volitile_state = VolitileState {
+            commit_index: 1,
+            ..Default::default()
+        };
         let request: Request<u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
@@ -399,7 +410,6 @@ mod tests {
         let (requests, next) =
             leader.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert_eq!(persistent_state.keep_alive, 0);
         assert!(next.is_none());
         assert!(requests.is_empty());
         assert_eq!(leader.next_index[&0], 1);
@@ -428,7 +438,10 @@ mod tests {
             log: log.clone(),
             ..Default::default()
         };
-        let mut volitile_state = VolitileState { commit_index: 1 };
+        let mut volitile_state = VolitileState {
+            commit_index: 1,
+            ..Default::default()
+        };
         let request: Request<u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
@@ -444,7 +457,6 @@ mod tests {
         let (requests, next) =
             leader.handle_request(&mut volitile_state, &mut persistent_state, request);
 
-        assert_eq!(persistent_state.keep_alive, 0);
         assert!(next.is_none());
         assert!(requests.is_empty());
         assert_eq!(volitile_state.commit_index, 1);

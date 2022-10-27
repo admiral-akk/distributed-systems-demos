@@ -23,7 +23,6 @@ pub struct PersistentState<T: Clone> {
     pub voted_for: Option<u32>,
     pub log: Vec<Entry<T>>,
     pub config: Config,
-    pub keep_alive: u32,
 }
 
 #[derive(PartialEq)]

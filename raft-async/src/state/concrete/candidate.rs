@@ -5,7 +5,7 @@ use crate::data::{
     data_type::CommandType,
     persistent_state::PersistentState,
     request::{
-        Client, ClientResponse, Event, Insert, InsertResponse, Request, Timeout, Vote, VoteResponse,
+        Client, ClientResponse, Event, Insert, InsertResponse, Request, Tick, Vote, VoteResponse,
     },
     volitile_state::VolitileState,
 };
@@ -16,7 +16,6 @@ use crate::state::{
 
 #[derive(Default)]
 pub struct Candidate {
-    attempts: u32,
     votes: HashSet<u32>,
 }
 impl TimeoutHandler for Candidate {
@@ -25,25 +24,27 @@ impl TimeoutHandler for Candidate {
     }
 }
 
+const TICK_TILL_NEW_ELECTION: u32 = 10;
+
 impl<T: CommandType> Handler<T> for Candidate {}
 impl<T: CommandType> EventHandler<Vote, T> for Candidate {}
 impl<T: CommandType> EventHandler<Client<T>, T> for Candidate {}
 impl<T: CommandType> EventHandler<ClientResponse<T>, T> for Candidate {}
 impl<T: CommandType> EventHandler<InsertResponse, T> for Candidate {}
-impl<T: CommandType> EventHandler<Timeout, T> for Candidate {
+impl<T: CommandType> EventHandler<Tick, T> for Candidate {
     fn handle_event(
         &mut self,
-        _volitile_state: &mut VolitileState,
+        volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         _sender: u32,
         _term: u32,
-        _event: Timeout,
+        _event: Tick,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
-        self.attempts += 1;
-        if self.attempts > 10 {
-            Candidate::call_election(persistent_state)
-        } else {
+        volitile_state.tick_since_start += 1;
+        if volitile_state.tick_since_start < TICK_TILL_NEW_ELECTION {
             (Candidate::request_votes(persistent_state), None)
+        } else {
+            Candidate::call_election(volitile_state, persistent_state)
         }
     }
 }
@@ -51,14 +52,14 @@ impl<T: CommandType> EventHandler<Timeout, T> for Candidate {
 impl<T: CommandType> EventHandler<Insert<T>, T> for Candidate {
     fn handle_event(
         &mut self,
-        _volitile_state: &mut VolitileState,
+        volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         sender: u32,
         term: u32,
         _event: Insert<T>,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         if term >= persistent_state.current_term {
-            persistent_state.keep_alive += 1;
+            volitile_state.tick_since_start = 0;
             persistent_state.voted_for = Some(sender);
             return (Vec::new(), Some(Follower::default().into()));
         }
@@ -101,12 +102,13 @@ impl Candidate {
             .collect()
     }
     pub fn call_election<T: CommandType>(
+        volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         println!("{} running for office!", persistent_state.id);
         persistent_state.current_term += 1;
         persistent_state.voted_for = Some(persistent_state.id);
-        persistent_state.keep_alive += 1;
+        volitile_state.tick_since_start = 0;
         (
             Candidate::request_votes(persistent_state),
             Some(Candidate::default().into()),
@@ -124,7 +126,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_timeout_few_iterations() {
+    fn test_tick() {
         let config = Config {
             servers: HashSet::from([0, 1, 2]),
         };
@@ -146,14 +148,13 @@ mod tests {
         };
         let mut volitile_state = VolitileState::default();
         let mut candidate = Candidate {
-            attempts: 0,
             ..Default::default()
         };
         let request: Request<u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
             term: 0,
-            event: Event::Timeout(request::Timeout),
+            event: Event::Tick(request::Tick),
         };
 
         let (requests, next) =
@@ -161,7 +162,7 @@ mod tests {
 
         assert!(next.is_none());
         assert!(requests.len() == 2);
-        assert_eq!(persistent_state.keep_alive, 0);
+        assert_eq!(volitile_state.tick_since_start, 1);
         for request in requests {
             assert!(request.sender == persistent_state.id);
             assert!(request.term == persistent_state.current_term);
@@ -175,11 +176,10 @@ mod tests {
                 }
             }
         }
-        assert!(candidate.attempts == 1);
     }
 
     #[test]
-    fn test_timeout_many_iterations() {
+    fn test_timeout() {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
@@ -199,25 +199,26 @@ mod tests {
             ]),
             ..Default::default()
         };
-        let mut volitile_state = VolitileState::default();
+        let mut volitile_state = VolitileState {
+            commit_index: 0,
+            tick_since_start: 100000,
+        };
         let mut candidate = Candidate {
-            attempts: 10000,
             ..Default::default()
         };
         let request: Request<u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
             term: 0,
-            event: Event::Timeout(request::Timeout),
+            event: Event::Tick(request::Tick),
         };
 
         let (requests, next) =
             candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
 
         assert!(next.is_some());
-        assert_eq!(persistent_state.keep_alive, 1);
-        if let Some(RaftState::Candidate(Candidate { attempts, votes })) = next {
-            assert!(attempts == 0);
+        assert_eq!(volitile_state.tick_since_start, 0);
+        if let Some(RaftState::Candidate(Candidate { votes })) = next {
             assert!(votes.is_empty());
             assert!(persistent_state.current_term == 4);
         } else {
@@ -263,7 +264,6 @@ mod tests {
         };
         let mut volitile_state = VolitileState::default();
         let mut candidate = Candidate {
-            attempts: 0,
             ..Default::default()
         };
         let request: Request<u32> = Request {
@@ -278,9 +278,7 @@ mod tests {
 
         assert!(next.is_none());
 
-        assert_eq!(persistent_state.keep_alive, 0);
         assert!(requests.len() == 0);
-        assert!(candidate.attempts == 0);
         assert!(candidate.votes.len() == 0);
     }
 
@@ -307,7 +305,6 @@ mod tests {
         };
         let mut volitile_state = VolitileState::default();
         let mut candidate = Candidate {
-            attempts: 0,
             ..Default::default()
         };
         let request: Request<u32> = Request {
@@ -322,9 +319,7 @@ mod tests {
 
         assert!(next.is_none());
 
-        assert_eq!(persistent_state.keep_alive, 0);
         assert!(requests.len() == 0);
-        assert!(candidate.attempts == 0);
         assert!(candidate.votes.eq(&HashSet::from([0])));
     }
 
@@ -351,7 +346,6 @@ mod tests {
         };
         let mut volitile_state = VolitileState::default();
         let mut candidate = Candidate {
-            attempts: 0,
             votes: HashSet::from([0]),
         };
         let request: Request<u32> = Request {
@@ -366,9 +360,7 @@ mod tests {
 
         assert!(next.is_none());
 
-        assert_eq!(persistent_state.keep_alive, 0);
         assert!(requests.len() == 0);
-        assert!(candidate.attempts == 0);
         assert!(candidate.votes.eq(&HashSet::from([0])));
     }
 
@@ -395,7 +387,6 @@ mod tests {
         };
         let mut volitile_state = VolitileState::default();
         let mut candidate = Candidate {
-            attempts: 0,
             votes: HashSet::from([0]),
         };
         let request: Request<u32> = Request {
@@ -414,8 +405,7 @@ mod tests {
         } else {
             panic!("Didn't become a leader!");
         }
-        assert_eq!(persistent_state.keep_alive, 1);
-        assert!(candidate.attempts == 0);
+        assert_eq!(volitile_state.tick_since_start, 0);
         assert!(candidate.votes.eq(&HashSet::from([0, 2])));
     }
 
@@ -443,7 +433,6 @@ mod tests {
         };
         let mut volitile_state = VolitileState::default();
         let mut candidate = Candidate {
-            attempts: 0,
             votes: HashSet::from([0]),
         };
         let entries = Vec::from([Entry {
@@ -463,7 +452,6 @@ mod tests {
 
         let (_, next) =
             candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
-        assert_eq!(persistent_state.keep_alive, 0);
         assert!(next.is_none());
         assert!(persistent_state.log.iter().eq(log.iter()));
     }
@@ -492,7 +480,6 @@ mod tests {
         };
         let mut volitile_state = VolitileState::default();
         let mut candidate = Candidate {
-            attempts: 0,
             votes: HashSet::from([0]),
         };
         let entries = Vec::from([Entry {
@@ -518,7 +505,7 @@ mod tests {
         } else {
             panic!("Failed to transition to follower");
         }
-        assert_eq!(persistent_state.keep_alive, 1);
+        assert_eq!(volitile_state.tick_since_start, 0);
         assert!(persistent_state.voted_for == Some(0));
         assert!(persistent_state.log[0..2].iter().eq(log[0..2].iter()));
     }

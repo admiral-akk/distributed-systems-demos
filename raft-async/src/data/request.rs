@@ -24,7 +24,7 @@ pub enum Event<T: CommandType> {
     InsertResponse(InsertResponse),
     Vote(Vote),
     VoteResponse(VoteResponse),
-    Timeout(Timeout),
+    Tick(Tick),
     Client(Client<T>),
     ClientResponse(ClientResponse<T>),
 }
@@ -59,4 +59,4 @@ pub struct Vote {
 pub struct VoteResponse {
     pub success: bool,
 }
-pub struct Timeout;
+pub struct Tick;

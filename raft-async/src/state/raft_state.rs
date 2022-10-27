@@ -45,15 +45,6 @@ impl From<Candidate> for RaftState {
 }
 
 impl RaftState {
-    pub fn timeout_length(&self) -> Duration {
-        match self {
-            RaftState::Offline(state) => state.timeout_length(),
-            RaftState::Candidate(state) => state.timeout_length(),
-            RaftState::Leader(state) => state.timeout_length(),
-            RaftState::Follower(state) => state.timeout_length(),
-        }
-    }
-
     pub fn handle_request<T: CommandType>(
         &mut self,
         request: Request<T>,

@@ -4,7 +4,7 @@ use crate::data::{
     data_type::CommandType,
     persistent_state::PersistentState,
     request::{
-        Client, ClientResponse, Event, Insert, InsertResponse, Request, Timeout, Vote, VoteResponse,
+        Client, ClientResponse, Event, Insert, InsertResponse, Request, Tick, Vote, VoteResponse,
     },
     volitile_state::VolitileState,
 };
@@ -31,7 +31,7 @@ pub trait EventHandler<EventType, T: CommandType> {
 pub trait Handler<T: CommandType>:
     EventHandler<Insert<T>, T>
     + EventHandler<InsertResponse, T>
-    + EventHandler<Timeout, T>
+    + EventHandler<Tick, T>
     + EventHandler<Vote, T>
     + EventHandler<VoteResponse, T>
     + EventHandler<Client<T>, T>
@@ -57,7 +57,7 @@ pub trait Handler<T: CommandType>:
             Event::VoteResponse(event) => {
                 self.handle_event(volitile_state, persistent_state, sender, term, event)
             }
-            Event::Timeout(event) => {
+            Event::Tick(event) => {
                 self.handle_event(volitile_state, persistent_state, sender, term, event)
             }
             Event::Client(event) => {

@@ -27,7 +27,6 @@ impl<T: CommandType> State<T> {
                 current_term: 0,
                 voted_for: None,
                 log: Vec::new(),
-                keep_alive: 0,
             },
             raft_state: RaftState::default(),
             volitile_state: VolitileState::default(),
@@ -37,10 +36,6 @@ impl<T: CommandType> State<T> {
     pub fn shutdown(&mut self) {
         println!("Server {} crashed", self.persistent_state.id);
         self.raft_state = RaftState::Offline(Offline {});
-    }
-
-    pub fn timeout_length(&self) -> Duration {
-        self.raft_state.timeout_length()
     }
 
     pub fn handle_request(&mut self, request: Request<T>) -> Vec<Request<T>> {
