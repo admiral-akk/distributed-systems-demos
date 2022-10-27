@@ -13,31 +13,31 @@ use crate::{
         persistent_state::{Config, PersistentState},
         request::{Crash, Event, Request, Tick},
     },
-    state::state::State,
+    state::state::{State, StateMachine},
 };
 
 use super::switch::{Id, Message, Switch};
 
-pub struct Server<T: CommandType> {
+pub struct Server<T: CommandType, Output: Send> {
     pub id: u32,
-    pub input: Receiver<Request<T>>,
-    pub output: Sender<Request<T>>,
-    pub server_sender: Sender<Request<T>>,
+    pub input: Receiver<Request<T, Output>>,
+    pub output: Sender<Request<T, Output>>,
+    pub server_sender: Sender<Request<T, Output>>,
 }
 
 const SERVER_FAILURE: Duration = Duration::from_millis(10000);
-
 const AVERAGE_TICK_LENGTH: Duration = Duration::from_millis(50);
+
 fn tick() -> Duration {
     rand::thread_rng().gen_range((AVERAGE_TICK_LENGTH / 2)..(3 * AVERAGE_TICK_LENGTH / 2))
 }
 
-impl<T: CommandType> Server<T>
+impl<T: CommandType, Output: Send> Server<T, Output>
 where
-    Request<T>: Message,
+    Request<T, Output>: Message,
     PersistentState<T>: Default,
 {
-    pub async fn new(id: u32, switch: Arc<Switch<Request<T>>>) -> Self {
+    pub async fn new(id: u32, switch: Arc<Switch<Request<T, Output>>>) -> Self {
         let (output, server_sender, input) = switch.register(Id::new(id)).await;
         Self {
             input,
@@ -47,9 +47,9 @@ where
         }
     }
 
-    pub fn init(server: Arc<Self>) {
+    pub fn init<SM: StateMachine<T, Output>>(server: Arc<Self>) {
         task::spawn(Server::random_shutdown(server.clone()));
-        task::spawn(Server::request_loop(server.clone()));
+        task::spawn(Server::request_loop::<SM>(server.clone()));
         task::spawn(Server::tick_loop(server.clone()));
     }
 
@@ -72,7 +72,6 @@ where
     async fn tick_loop(server: Arc<Self>) {
         loop {
             task::sleep(tick()).await;
-            // Check if keep alive has been incremented. If not, then we've timed out.
             server
                 .server_sender
                 .send(Request {
@@ -85,8 +84,8 @@ where
         }
     }
 
-    async fn request_loop(server: Arc<Self>) {
-        let mut state: State<T> = State::new(
+    async fn request_loop<SM: StateMachine<T, Output>>(server: Arc<Self>) {
+        let mut state: State<T, SM> = State::new(
             server.id,
             Config {
                 servers: HashSet::from([0, 1, 2, 3, 4]),
@@ -96,7 +95,7 @@ where
         loop {
             let request = server.input.recv().await;
             if let Ok(request) = request {
-                (state, responses) = state.handle_request(request);
+                (responses, state) = state.handle_request(request);
                 for response in responses {
                     server.output.send(response).await;
                 }

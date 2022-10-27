@@ -39,7 +39,12 @@ impl<T: CommandType> PersistentState<T> {
         });
     }
 
-    pub fn insert(&self, index: usize, max_length: usize, commit_index: usize) -> Event<T> {
+    pub fn insert<Output>(
+        &self,
+        index: usize,
+        max_length: usize,
+        commit_index: usize,
+    ) -> Event<T, Output> {
         let entries = match index < self.log.len() {
             true => Vec::from(&self.log[index..(index + max_length).min(self.log.len())]),
             false => Vec::new(),

@@ -10,15 +10,22 @@ use crate::{
 
 use super::raft_state::RaftState;
 
-pub struct State<T: CommandType> {
+pub trait StateMachine<In, Out>: Default + Send + 'static {
+    fn apply(&mut self, command: In);
+    fn get(&self) -> Out;
+}
+
+pub struct State<T: CommandType, SM> {
+    pub state_machine: SM,
     pub persistent_state: PersistentState<T>,
     pub raft_state: RaftState,
     pub volitile_state: VolitileState,
 }
 
-impl<T: CommandType> State<T> {
+impl<T: CommandType, SM: Default> State<T, SM> {
     pub fn new(id: u32, config: Config) -> Self {
         Self {
+            state_machine: SM::default(),
             persistent_state: PersistentState {
                 id,
                 config,
@@ -31,7 +38,13 @@ impl<T: CommandType> State<T> {
         }
     }
 
-    pub fn handle_request(mut self, request: Request<T>) -> (Self, Vec<Request<T>>) {
+    pub fn handle_request<Output>(
+        mut self,
+        request: Request<T, Output>,
+    ) -> (Vec<Request<T, Output>>, Self)
+    where
+        SM: StateMachine<T, Output>,
+    {
         // Todo: Maybe find better place to put this, since State shouldn't be aware of how each state updates.
         match self.raft_state {
             RaftState::Offline(_) => {}
@@ -48,12 +61,13 @@ impl<T: CommandType> State<T> {
             }
         }
 
-        let (responses, next) = self.raft_state.handle_request(
+        let responses;
+        (responses, self.raft_state) = self.raft_state.handle_request(
             request,
             &mut self.volitile_state,
             &mut self.persistent_state,
+            &mut self.state_machine,
         );
-        self.raft_state = next;
-        (self, responses)
+        (responses, self)
     }
 }

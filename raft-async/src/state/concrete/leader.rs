@@ -1,14 +1,17 @@
 use std::collections::HashMap;
 
-use crate::data::{
-    data_type::CommandType,
-    persistent_state::PersistentState,
-    request::{Client, Event, InsertResponse, Request, Tick},
-    volitile_state::VolitileState,
-};
 use crate::state::{
     handler::{EventHandler, Handler},
     raft_state::RaftState,
+};
+use crate::{
+    data::{
+        data_type::CommandType,
+        persistent_state::PersistentState,
+        request::{Client, Event, InsertResponse, Request, Tick},
+        volitile_state::VolitileState,
+    },
+    state::state::StateMachine,
 };
 
 use super::candidate::Candidate;
@@ -19,11 +22,11 @@ pub struct Leader {
 }
 
 impl Leader {
-    pub fn send_heartbeat<T: CommandType>(
+    pub fn send_heartbeat<T: CommandType, Output>(
         &self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-    ) -> Vec<Request<T>> {
+    ) -> Vec<Request<T, Output>> {
         persistent_state
             .other_servers()
             .iter()
@@ -31,12 +34,12 @@ impl Leader {
             .collect()
     }
 
-    fn append_update<T: CommandType>(
+    fn append_update<T: CommandType, Output>(
         &self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         server: u32,
-    ) -> Request<T> {
+    ) -> Request<T, Output> {
         Request {
             sender: persistent_state.id,
             reciever: server,
@@ -49,11 +52,11 @@ impl Leader {
         }
     }
 
-    pub fn from_candidate<T: CommandType>(
+    pub fn from_candidate<T: CommandType, Output>(
         _candidate: &Candidate,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-    ) -> (Vec<Request<T>>, RaftState) {
+    ) -> (Vec<Request<T, Output>>, RaftState) {
         persistent_state.current_term += 1;
         volitile_state.tick_since_start = 0;
         println!("{} elected leader!", persistent_state.id);
@@ -76,14 +79,18 @@ impl Leader {
 
 impl Handler for Leader {}
 impl EventHandler for Leader {
-    fn handle<T: CommandType>(
+    fn handle<T: CommandType, Output, SM>(
         mut self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
+        state_machine: &mut SM,
         sender: u32,
-        _term: u32,
-        request: Request<T>,
-    ) -> (Vec<Request<T>>, RaftState) {
+        term: u32,
+        request: Request<T, Output>,
+    ) -> (Vec<Request<T, Output>>, RaftState)
+    where
+        SM: StateMachine<T, Output>,
+    {
         match request.event {
             Event::Client(Client { data }) => {
                 persistent_state.push(data);
@@ -112,6 +119,7 @@ impl EventHandler for Leader {
                 if matching_servers + 1 > persistent_state.quorum()
                     && volitile_state.commit_index < next_index
                 {
+                    for index in volitile_state.commit_index..next_index {}
                     volitile_state.commit_index = next_index;
                     println!("{} index committed!", next_index);
                 }
@@ -128,6 +136,7 @@ mod tests {
 
     use crate::data::persistent_state::{Config, Entry};
     use crate::data::request::{self, Event};
+    use crate::Sum;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
@@ -157,7 +166,7 @@ mod tests {
             tick_since_start: 10,
         };
 
-        let (requests, next) = Leader::from_candidate(
+        let (requests, next): (Vec<Request<_, u32>>, _) = Leader::from_candidate(
             &Candidate::default(),
             &mut volitile_state,
             &mut persistent_state,
@@ -221,7 +230,7 @@ mod tests {
             commit_index: 1,
             tick_since_start: 0,
         };
-        let request: Request<u32> = Request {
+        let request: Request<u32, u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
             term: 0,
@@ -232,8 +241,14 @@ mod tests {
             match_index: HashMap::from([(0, 0), (2, 0), (3, 0), (4, 0)]),
         };
 
-        let (requests, next) =
-            leader.handle_request(&mut volitile_state, &mut persistent_state, request);
+        let mut state_machine = Sum::default();
+
+        let (requests, next) = leader.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            request,
+        );
 
         assert_eq!(volitile_state.tick_since_start, 1);
         if let RaftState::Leader(_) = next {
@@ -283,7 +298,7 @@ mod tests {
             commit_index: 2,
             ..Default::default()
         };
-        let request: Request<u32> = Request {
+        let request: Request<u32, u32> = Request {
             sender: 4,
             reciever: persistent_state.id,
             term: 3,
@@ -295,8 +310,14 @@ mod tests {
             match_index: HashMap::from([(0, 0), (2, 0), (3, 0), (4, 0)]),
         };
 
-        let (requests, next) =
-            leader.handle_request(&mut volitile_state, &mut persistent_state, request);
+        let mut state_machine = Sum::default();
+
+        let (requests, next) = leader.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            request,
+        );
 
         if let RaftState::Leader(leader) = next {
             assert_eq!(leader.next_index[&4], 2);
@@ -332,7 +353,7 @@ mod tests {
             commit_index: 1,
             ..Default::default()
         };
-        let request: Request<u32> = Request {
+        let request: Request<u32, u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
             term: 3,
@@ -344,8 +365,14 @@ mod tests {
             match_index: HashMap::from([(0, 0), (2, 0), (3, 0), (4, 0)]),
         };
 
-        let (requests, next) =
-            leader.handle_request(&mut volitile_state, &mut persistent_state, request);
+        let mut state_machine = Sum::default();
+
+        let (requests, next) = leader.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            request,
+        );
 
         if let RaftState::Leader(leader) = next {
             assert_eq!(leader.next_index[&0], 2);
@@ -381,7 +408,7 @@ mod tests {
             commit_index: 1,
             ..Default::default()
         };
-        let request: Request<u32> = Request {
+        let request: Request<u32, u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
             term: 3,
@@ -393,8 +420,14 @@ mod tests {
             match_index: HashMap::from([(0, 0), (2, 0), (3, 0), (4, 0)]),
         };
 
-        let (requests, next) =
-            leader.handle_request(&mut volitile_state, &mut persistent_state, request);
+        let mut state_machine = Sum::default();
+
+        let (requests, next) = leader.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            request,
+        );
 
         if let RaftState::Leader(leader) = next {
             assert_eq!(leader.next_index[&0], 1);
@@ -431,7 +464,7 @@ mod tests {
             commit_index: 1,
             ..Default::default()
         };
-        let request: Request<u32> = Request {
+        let request: Request<u32, u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
             term: 0,
@@ -443,8 +476,14 @@ mod tests {
             match_index: HashMap::from([(0, 0), (2, 0), (3, 0), (4, 0)]),
         };
 
-        let (requests, next) =
-            leader.handle_request(&mut volitile_state, &mut persistent_state, request);
+        let mut state_machine = Sum::default();
+
+        let (requests, next) = leader.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            request,
+        );
 
         if let RaftState::Leader(_) = next {
         } else {

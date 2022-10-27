@@ -1,15 +1,18 @@
 use std::collections::HashSet;
 
 use super::{follower::Follower, leader::Leader};
-use crate::data::{
-    data_type::CommandType,
-    persistent_state::PersistentState,
-    request::{Event, Request, Tick, Vote, VoteResponse},
-    volitile_state::VolitileState,
-};
 use crate::state::{
     handler::{EventHandler, Handler},
     raft_state::RaftState,
+};
+use crate::{
+    data::{
+        data_type::CommandType,
+        persistent_state::PersistentState,
+        request::{Event, Request, Tick, Vote, VoteResponse},
+        volitile_state::VolitileState,
+    },
+    state::state::StateMachine,
 };
 
 #[derive(Default)]
@@ -20,14 +23,18 @@ const TICK_TILL_NEW_ELECTION: u32 = 10;
 
 impl Handler for Candidate {}
 impl EventHandler for Candidate {
-    fn handle<T: CommandType>(
+    fn handle<T: CommandType, Output, SM>(
         mut self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
+        state_machine: &mut SM,
         sender: u32,
         term: u32,
-        request: Request<T>,
-    ) -> (Vec<Request<T>>, RaftState) {
+        request: Request<T, Output>,
+    ) -> (Vec<Request<T, Output>>, RaftState)
+    where
+        SM: StateMachine<T, Output>,
+    {
         match request.event {
             Event::Insert(_) => {
                 if term >= persistent_state.current_term {
@@ -61,11 +68,13 @@ impl EventHandler for Candidate {
 }
 
 impl Candidate {
-    fn request_votes<T: CommandType>(persistent_state: &mut PersistentState<T>) -> Vec<Request<T>> {
+    fn request_votes<T: CommandType, Output>(
+        persistent_state: &mut PersistentState<T>,
+    ) -> Vec<Request<T, Output>> {
         persistent_state
             .other_servers()
             .iter()
-            .map(|id| Request::<T> {
+            .map(|id| Request::<T, Output> {
                 sender: persistent_state.id,
                 reciever: *id,
                 term: persistent_state.current_term,
@@ -75,10 +84,10 @@ impl Candidate {
             })
             .collect()
     }
-    pub fn call_election<T: CommandType>(
+    pub fn call_election<T: CommandType, Output>(
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-    ) -> (Vec<Request<T>>, RaftState) {
+    ) -> (Vec<Request<T, Output>>, RaftState) {
         println!("{} running for office!", persistent_state.id);
         persistent_state.current_term += 1;
         persistent_state.voted_for = Some(persistent_state.id);
@@ -96,6 +105,7 @@ mod tests {
 
     use crate::data::persistent_state::{Config, Entry};
     use crate::data::request;
+    use crate::Sum;
 
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
@@ -125,15 +135,20 @@ mod tests {
         let candidate = Candidate {
             ..Default::default()
         };
-        let request: Request<u32> = Request {
+        let request: Request<u32, u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
             term: 0,
             event: Event::Tick(request::Tick),
         };
+        let mut state_machine = Sum::default();
 
-        let (requests, next) =
-            candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
+        let (requests, next) = candidate.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            request,
+        );
 
         if let RaftState::Candidate(_) = next {
         } else {
@@ -184,15 +199,20 @@ mod tests {
         let candidate = Candidate {
             ..Default::default()
         };
-        let request: Request<u32> = Request {
+        let request: Request<u32, u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
             term: 0,
             event: Event::Tick(request::Tick),
         };
+        let mut state_machine = Sum::default();
 
-        let (requests, next) =
-            candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
+        let (requests, next) = candidate.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            request,
+        );
 
         assert_eq!(volitile_state.tick_since_start, 0);
         if let RaftState::Candidate(Candidate { votes }) = next {
@@ -243,15 +263,20 @@ mod tests {
         let candidate = Candidate {
             ..Default::default()
         };
-        let request: Request<u32> = Request {
+        let request: Request<u32, u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
             term: 0,
             event: Event::VoteResponse(request::VoteResponse { success: false }),
         };
+        let mut state_machine = Sum::default();
 
-        let (requests, next) =
-            candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
+        let (requests, next) = candidate.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            request,
+        );
 
         if let RaftState::Candidate(candidate) = next {
             assert!(candidate.votes.len() == 0);
@@ -287,15 +312,20 @@ mod tests {
         let candidate = Candidate {
             ..Default::default()
         };
-        let request: Request<u32> = Request {
+        let request: Request<u32, u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
             term: 0,
             event: Event::VoteResponse(request::VoteResponse { success: true }),
         };
+        let mut state_machine = Sum::default();
 
-        let (requests, next) =
-            candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
+        let (requests, next) = candidate.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            request,
+        );
 
         if let RaftState::Candidate(candidate) = next {
             assert!(candidate.votes.eq(&HashSet::from([0])));
@@ -331,15 +361,20 @@ mod tests {
         let candidate = Candidate {
             votes: HashSet::from([0]),
         };
-        let request: Request<u32> = Request {
+        let request: Request<u32, u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
             term: 0,
             event: Event::VoteResponse(request::VoteResponse { success: true }),
         };
+        let mut state_machine = Sum::default();
 
-        let (requests, next) =
-            candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
+        let (requests, next) = candidate.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            request,
+        );
 
         if let RaftState::Candidate(candidate) = next {
             assert!(candidate.votes.eq(&HashSet::from([0])));
@@ -375,15 +410,20 @@ mod tests {
         let candidate = Candidate {
             votes: HashSet::from([0]),
         };
-        let request: Request<u32> = Request {
+        let request: Request<u32, u32> = Request {
             sender: 2,
             reciever: persistent_state.id,
             term: 0,
             event: Event::VoteResponse(request::VoteResponse { success: true }),
         };
+        let mut state_machine = Sum::default();
 
-        let (_, next) =
-            candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
+        let (requests, next) = candidate.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            request,
+        );
 
         // We can verify the elected Leader values in the leader tests.
         if let RaftState::Leader(_) = next {
@@ -423,7 +463,7 @@ mod tests {
             term: 4,
             command: 5,
         }]);
-        let request: Request<u32> = Request {
+        let request: Request<u32, u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
             term: 3,
@@ -433,9 +473,14 @@ mod tests {
                 leader_commit: 12,
             }),
         };
+        let mut state_machine = Sum::default();
 
-        let (_, next) =
-            candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
+        let (requests, next) = candidate.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            request,
+        );
         if let RaftState::Candidate(_) = next {
         } else {
             panic!("Failed to transition to follower");
@@ -473,7 +518,7 @@ mod tests {
             term: 4,
             command: 5,
         }]);
-        let request: Request<u32> = Request {
+        let request: Request<u32, u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
             term: 4,
@@ -483,9 +528,14 @@ mod tests {
                 leader_commit: 12,
             }),
         };
+        let mut state_machine = Sum::default();
 
-        let (_, next) =
-            candidate.handle_request(&mut volitile_state, &mut persistent_state, request);
+        let (requests, next) = candidate.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            request,
+        );
 
         if let RaftState::Follower(_) = next {
         } else {

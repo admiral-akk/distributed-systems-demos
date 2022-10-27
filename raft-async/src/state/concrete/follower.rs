@@ -8,24 +8,29 @@ use crate::{
     state::{
         handler::{EventHandler, Handler},
         raft_state::RaftState,
+        state::StateMachine,
     },
 };
 
 use super::candidate::Candidate;
 
 #[derive(Default)]
-pub struct Follower {}
+pub struct Follower;
 const TICK_TILL_ELECTION: u32 = 25;
 impl Handler for Follower {}
 impl EventHandler for Follower {
-    fn handle<T: CommandType>(
-        self,
+    fn handle<T: CommandType, Output, SM>(
+        mut self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
+        state_machine: &mut SM,
         sender: u32,
         term: u32,
-        request: Request<T>,
-    ) -> (Vec<Request<T>>, RaftState) {
+        request: Request<T, Output>,
+    ) -> (Vec<Request<T, Output>>, RaftState)
+    where
+        SM: StateMachine<T, Output>,
+    {
         match request.event {
             Event::Vote(event) => {
                 println!("{} requested vote from {}", sender, persistent_state.id);
@@ -100,6 +105,7 @@ mod tests {
     use crate::data::persistent_state::{Config, Entry, LogState};
     use crate::data::request;
     use crate::state::concrete::follower::Follower;
+    use crate::Sum;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
     #[test]
@@ -129,15 +135,21 @@ mod tests {
         };
         let follower = Follower::default();
         let _term = persistent_state.current_term;
-        let request: Request<u32> = Request {
+        let request: Request<u32, u32> = Request {
             sender: 10,
             reciever: persistent_state.id,
             term: 0,
             event: Event::Tick(request::Tick),
         };
 
-        let (requests, next) =
-            follower.handle_request(&mut volitile_state, &mut persistent_state, request);
+        let mut state_machine = Sum::default();
+
+        let (requests, next) = follower.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            request,
+        );
 
         if let RaftState::Follower(_) = next {
         } else {
@@ -174,15 +186,21 @@ mod tests {
         };
         let follower = Follower::default();
         let term = persistent_state.current_term;
-        let request: Request<u32> = Request {
+        let request: Request<u32, u32> = Request {
             sender: 10,
             reciever: persistent_state.id,
             term: 0,
             event: Event::Tick(request::Tick),
         };
 
-        let (requests, next) =
-            follower.handle_request(&mut volitile_state, &mut persistent_state, request);
+        let mut state_machine = Sum::default();
+
+        let (requests, next) = follower.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            request,
+        );
 
         if let RaftState::Candidate(_) = next {
             assert!(persistent_state.current_term == term + 1);
@@ -230,7 +248,7 @@ mod tests {
         };
         let mut volitile_state = VolitileState::default();
         let follower = Follower::default();
-        let original_request: Request<u32> = Request {
+        let original_request: Request<u32, u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
             term: 4,
@@ -244,8 +262,14 @@ mod tests {
             }),
         };
 
-        let (requests, next) =
-            follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
+        let mut state_machine = Sum::default();
+
+        let (requests, next) = follower.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            original_request,
+        );
 
         if let RaftState::Follower(_) = next {
         } else {
@@ -299,7 +323,7 @@ mod tests {
         };
         let mut volitile_state = VolitileState::default();
         let follower = Follower::default();
-        let original_request: Request<u32> = Request {
+        let original_request: Request<u32, u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
             term: 4,
@@ -316,8 +340,14 @@ mod tests {
             }),
         };
 
-        let (requests, next) =
-            follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
+        let mut state_machine = Sum::default();
+
+        let (requests, next) = follower.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            original_request,
+        );
 
         if let RaftState::Follower(_) = next {
         } else {
@@ -367,7 +397,7 @@ mod tests {
         };
         let mut volitile_state = VolitileState::default();
         let follower = Follower::default();
-        let original_request: Request<u32> = Request {
+        let original_request: Request<u32, u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
             term: 4,
@@ -381,8 +411,14 @@ mod tests {
             }),
         };
 
-        let (requests, next) =
-            follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
+        let mut state_machine = Sum::default();
+
+        let (requests, next) = follower.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            original_request,
+        );
 
         if let RaftState::Follower(_) = next {
         } else {
@@ -436,7 +472,7 @@ mod tests {
             term: 3,
             command: 5,
         }]);
-        let original_request: Request<u32> = Request {
+        let original_request: Request<u32, u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
             term: 4,
@@ -447,8 +483,14 @@ mod tests {
             }),
         };
 
-        let (requests, next) =
-            follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
+        let mut state_machine = Sum::default();
+
+        let (requests, next) = follower.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            original_request,
+        );
 
         if let RaftState::Follower(_) = next {
         } else {
@@ -512,7 +554,7 @@ mod tests {
             term: 4,
             command: 5,
         }]);
-        let original_request: Request<u32> = Request {
+        let original_request: Request<u32, u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
             term: 4,
@@ -523,8 +565,14 @@ mod tests {
             }),
         };
 
-        let (requests, next) =
-            follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
+        let mut state_machine = Sum::default();
+
+        let (requests, next) = follower.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            original_request,
+        );
 
         if let RaftState::Follower(_) = next {
         } else {
@@ -585,7 +633,7 @@ mod tests {
         };
         let mut volitile_state = VolitileState::default();
         let follower = Follower::default();
-        let original_request: Request<u32> = Request {
+        let original_request: Request<u32, u32> = Request {
             sender: 2,
             reciever: persistent_state.id,
             term: 3,
@@ -594,8 +642,14 @@ mod tests {
             }),
         };
 
-        let (requests, next) =
-            follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
+        let mut state_machine = Sum::default();
+
+        let (requests, next) = follower.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            original_request,
+        );
 
         if let RaftState::Follower(_) = next {
         } else {
@@ -652,7 +706,7 @@ mod tests {
         };
         let mut volitile_state = VolitileState::default();
         let follower = Follower::default();
-        let original_request: Request<u32> = Request {
+        let original_request: Request<u32, u32> = Request {
             sender: 2,
             reciever: persistent_state.id,
             term: 4,
@@ -661,8 +715,14 @@ mod tests {
             }),
         };
 
-        let (requests, next) =
-            follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
+        let mut state_machine = Sum::default();
+
+        let (requests, next) = follower.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            original_request,
+        );
 
         if let RaftState::Follower(_) = next {
         } else {
@@ -719,7 +779,7 @@ mod tests {
         };
         let mut volitile_state = VolitileState::default();
         let follower = Follower::default();
-        let original_request: Request<u32> = Request {
+        let original_request: Request<u32, u32> = Request {
             sender: 2,
             reciever: persistent_state.id,
             term: 4,
@@ -728,8 +788,14 @@ mod tests {
             }),
         };
 
-        let (requests, next) =
-            follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
+        let mut state_machine = Sum::default();
+
+        let (requests, next) = follower.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            original_request,
+        );
 
         if let RaftState::Follower(_) = next {
         } else {
@@ -786,7 +852,7 @@ mod tests {
         };
         let mut volitile_state = VolitileState::default();
         let follower = Follower::default();
-        let original_request: Request<u32> = Request {
+        let original_request: Request<u32, u32> = Request {
             sender: 2,
             reciever: persistent_state.id,
             term: 4,
@@ -795,8 +861,14 @@ mod tests {
             }),
         };
 
-        let (requests, next) =
-            follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
+        let mut state_machine = Sum::default();
+
+        let (requests, next) = follower.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            original_request,
+        );
 
         if let RaftState::Follower(_) = next {
         } else {
@@ -853,7 +925,7 @@ mod tests {
         };
         let mut volitile_state = VolitileState::default();
         let follower = Follower::default();
-        let original_request: Request<u32> = Request {
+        let original_request: Request<u32, u32> = Request {
             sender: 2,
             reciever: persistent_state.id,
             term: 4,
@@ -862,8 +934,14 @@ mod tests {
             }),
         };
 
-        let (requests, next) =
-            follower.handle_request(&mut volitile_state, &mut persistent_state, original_request);
+        let mut state_machine = Sum::default();
+
+        let (requests, next) = follower.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            original_request,
+        );
 
         if let RaftState::Follower(_) = next {
         } else {
@@ -914,7 +992,7 @@ mod tests {
             commit_index: 1,
             ..Default::default()
         };
-        let request: Request<u32> = Request {
+        let request: Request<u32, u32> = Request {
             sender: 10,
             reciever: persistent_state.id,
             term: 0,
@@ -923,8 +1001,14 @@ mod tests {
 
         let follower = Follower {};
 
-        let (requests, next) =
-            follower.handle_request(&mut volitile_state, &mut persistent_state, request);
+        let mut state_machine = Sum::default();
+
+        let (requests, next) = follower.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            request,
+        );
 
         if let RaftState::Follower(_) = next {
         } else {
@@ -976,7 +1060,7 @@ mod tests {
             commit_index: 1,
             ..Default::default()
         };
-        let request: Request<u32> = Request {
+        let request: Request<u32, u32> = Request {
             sender: 10,
             reciever: persistent_state.id,
             term: 0,
@@ -985,8 +1069,14 @@ mod tests {
 
         let follower = Follower {};
 
-        let (requests, next) =
-            follower.handle_request(&mut volitile_state, &mut persistent_state, request);
+        let mut state_machine = Sum::default();
+
+        let (requests, next) = follower.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            request,
+        );
 
         if let RaftState::Follower(_) = next {
         } else {

@@ -5,31 +5,39 @@ use crate::data::{
     volitile_state::VolitileState,
 };
 
-use super::{concrete::offline::Offline, raft_state::RaftState};
+use super::{concrete::offline::Offline, raft_state::RaftState, state::StateMachine};
 
 pub trait EventHandler
 where
     Self: Into<RaftState>,
 {
-    fn handle<T: CommandType>(
+    fn handle<T: CommandType, Output, SM>(
         self,
         _volitile_state: &mut VolitileState,
         _persistent_state: &mut PersistentState<T>,
+        _state_machine: &mut SM,
         _sender: u32,
         _term: u32,
-        _request: Request<T>,
-    ) -> (Vec<Request<T>>, RaftState) {
+        _request: Request<T, Output>,
+    ) -> (Vec<Request<T, Output>>, RaftState)
+    where
+        SM: StateMachine<T, Output>,
+    {
         (Vec::default(), self.into())
     }
 }
 
 pub trait Handler: EventHandler {
-    fn handle_request<T: CommandType>(
+    fn handle_request<T: CommandType, Output, SM>(
         self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-        request: Request<T>,
-    ) -> (Vec<Request<T>>, RaftState) {
+        state_machine: &mut SM,
+        request: Request<T, Output>,
+    ) -> (Vec<Request<T, Output>>, RaftState)
+    where
+        SM: StateMachine<T, Output>,
+    {
         let (sender, term) = (request.sender, request.term);
         match request.event {
             Event::Tick(_) => {
@@ -41,6 +49,13 @@ pub trait Handler: EventHandler {
             _ => {}
         }
 
-        self.handle(volitile_state, persistent_state, sender, term, request)
+        self.handle(
+            volitile_state,
+            persistent_state,
+            state_machine,
+            sender,
+            term,
+            request,
+        )
     }
 }

@@ -5,22 +5,39 @@ use async_std::sync::Arc;
 use async_std::task;
 use data::request::Request;
 use server::{client::Client, server::Server, switch::Switch};
+use state::state::StateMachine;
 
 mod data;
 mod server;
 mod state;
+
+#[derive(Default, Debug, Clone)]
+struct Sum {
+    total: u32,
+}
+
+impl StateMachine<u32, u32> for Sum {
+    fn apply(&mut self, command: u32) {
+        self.total += command;
+    }
+
+    fn get(&self) -> u32 {
+        self.total
+    }
+}
+
 fn main() {
-    let switch: Arc<Switch<Request<u32>>> = Switch::init();
+    let switch: Arc<Switch<Request<u32, u32>>> = Switch::init();
     let servers = (0..5)
         .map(|id| Server::new(id, switch.clone()))
         .map(|server| Arc::new(task::block_on(server)))
         .collect::<Vec<_>>();
     let clients = (10..12)
-        .map(|id| Client::<u32>::new(id, switch.clone()))
+        .map(|id| Client::<u32, u32>::new(id, switch.clone()))
         .map(|client| Arc::new(task::block_on(client)))
         .collect::<Vec<_>>();
     for server in servers {
-        Server::init(server);
+        Server::<u32, u32>::init::<Sum>(server);
     }
 
     for client in clients {

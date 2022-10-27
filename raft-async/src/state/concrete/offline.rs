@@ -8,6 +8,7 @@ use crate::{
     state::{
         handler::{EventHandler, Handler},
         raft_state::RaftState,
+        state::StateMachine,
     },
 };
 
@@ -20,14 +21,18 @@ impl Handler for Offline {}
 const TICK_TO_REBOOT: u32 = 100;
 
 impl EventHandler for Offline {
-    fn handle<T: CommandType>(
+    fn handle<T: CommandType, Output, SM>(
         self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
+        state_machine: &mut SM,
         _sender: u32,
         _term: u32,
-        request: Request<T>,
-    ) -> (Vec<Request<T>>, RaftState) {
+        request: Request<T, Output>,
+    ) -> (Vec<Request<T, Output>>, RaftState)
+    where
+        SM: StateMachine<T, Output>,
+    {
         match request.event {
             Event::Tick(Tick) => {
                 if volitile_state.tick_since_start < TICK_TO_REBOOT {
@@ -48,6 +53,7 @@ mod tests {
 
     use crate::data::persistent_state::{Config, Entry};
     use crate::data::request::{self, Event};
+    use crate::Sum;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
@@ -77,15 +83,20 @@ mod tests {
             tick_since_start: 0,
         };
         let follower = Offline {};
-        let request: Request<u32> = Request {
+        let request: Request<u32, u32> = Request {
             sender: 10,
             reciever: persistent_state.id,
             term: 0,
             event: Event::Tick(request::Tick),
         };
+        let mut state_machine = Sum::default();
 
-        let (requests, next) =
-            follower.handle_request(&mut volitile_state, &mut persistent_state, request);
+        let (requests, next) = follower.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            request,
+        );
 
         if let RaftState::Offline(_) = next {
         } else {
@@ -123,15 +134,20 @@ mod tests {
             tick_since_start: 100000,
         };
         let follower = Offline {};
-        let request: Request<u32> = Request {
+        let request: Request<u32, u32> = Request {
             sender: 10,
             reciever: persistent_state.id,
             term: 0,
             event: Event::Tick(request::Tick),
         };
+        let mut state_machine = Sum::default();
 
-        let (requests, next) =
-            follower.handle_request(&mut volitile_state, &mut persistent_state, request);
+        let (requests, next) = follower.handle_request(
+            &mut volitile_state,
+            &mut persistent_state,
+            &mut state_machine,
+            request,
+        );
 
         if let RaftState::Follower(_) = next {
         } else {

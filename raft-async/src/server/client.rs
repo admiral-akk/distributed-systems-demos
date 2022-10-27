@@ -13,24 +13,24 @@ use rand::Rng;
 
 use super::switch::{Id, Message, Switch};
 
-pub struct Client<T: CommandType>
+pub struct Client<T: CommandType, Output>
 where
-    Request<T>: Message,
+    Request<T, Output>: Message,
 {
     pub id: u32,
     pub leader_id: Mutex<u32>,
-    pub input: Receiver<Request<T>>,
-    pub output: Sender<Request<T>>,
-    pub server_sender: Sender<Request<T>>,
+    pub input: Receiver<Request<T, Output>>,
+    pub output: Sender<Request<T, Output>>,
+    pub server_sender: Sender<Request<T, Output>>,
 }
 
 const WAIT: Duration = Duration::from_millis(500);
 
-impl<T: CommandType> Client<T>
+impl<T: CommandType, Output: Send> Client<T, Output>
 where
-    Request<T>: Message,
+    Request<T, Output>: Message,
 {
-    pub async fn new(id: u32, switch: Arc<Switch<Request<T>>>) -> Self {
+    pub async fn new(id: u32, switch: Arc<Switch<Request<T, Output>>>) -> Self {
         let (output, server_sender, input) = switch.register(Id::new(id)).await;
         Self {
             id,
@@ -41,12 +41,12 @@ where
         }
     }
 
-    pub fn init(server: Arc<Client<T>>) {
+    pub fn init(server: Arc<Client<T, Output>>) {
         task::spawn(Client::request_loop(server.clone()));
         task::spawn(Client::response_loop(server.clone()));
     }
 
-    async fn request_loop(client: Arc<Client<T>>) {
+    async fn request_loop(client: Arc<Client<T, Output>>) {
         loop {
             let wait_duration = rand::thread_rng().gen_range((WAIT / 2)..(2 * WAIT));
             task::sleep(wait_duration).await;
@@ -60,7 +60,7 @@ where
         }
     }
 
-    async fn response_loop(client: Arc<Client<T>>) {
+    async fn response_loop(client: Arc<Client<T, Output>>) {
         loop {
             let request = client.input.recv().await;
             if let Ok(request) = request {
