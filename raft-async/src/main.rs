@@ -4,7 +4,7 @@ use async_std::sync::Arc;
 
 use async_std::task;
 use data::request::Request;
-use rand::{Rng, RngCore};
+use rand::{Rng};
 use server::{client::Client, server::Server, switch::Switch};
 use state::state::StateMachine;
 
