@@ -7,7 +7,8 @@ use async_std::{
 };
 use rand::Rng;
 
-pub struct Id(u32);
+#[derive(Hash, PartialEq, Eq)]
+pub struct Id(u32); // todo: change id into an enum so you can seperate client/server
 
 impl Id {
     pub fn new(id: u32) -> Id {
@@ -23,7 +24,7 @@ pub trait Message: Send + 'static {
 pub struct Switch<T> {
     pub sender: Sender<T>,
     pub reciever: Receiver<T>,
-    pub senders: Mutex<HashMap<u32, Sender<T>>>,
+    pub senders: Mutex<HashMap<Id, Sender<T>>>,
 }
 
 impl<T: Message> Switch<T> {
@@ -48,16 +49,13 @@ impl<T: Message> Switch<T> {
                 }
                 let socket = {
                     let senders = switch.senders.lock().await;
-                    senders[&request.recipient().0].clone()
+                    senders[&request.recipient()].clone()
                 };
                 socket.send(request).await;
             }
         }
     }
-    pub async fn register(
-        &self,
-        id: u32, // todo: change id into an enum so you can seperate client/server
-    ) -> (Sender<T>, Sender<T>, Receiver<T>) {
+    pub async fn register(&self, id: Id) -> (Sender<T>, Sender<T>, Receiver<T>) {
         let mut senders = self.senders.lock().await;
         let (server_sender, server_reciever) = channel::unbounded();
         senders.insert(id, server_sender.clone());

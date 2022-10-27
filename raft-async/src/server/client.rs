@@ -11,7 +11,7 @@ use async_std::{
 };
 use rand::Rng;
 
-use super::switch::{Message, Switch};
+use super::switch::{Id, Message, Switch};
 
 pub struct Client<T: CommandType>
 where
@@ -31,7 +31,7 @@ where
     Request<T>: Message,
 {
     pub async fn new(id: u32, switch: Arc<Switch<Request<T>>>) -> Self {
-        let (output, server_sender, input) = switch.register(id).await;
+        let (output, server_sender, input) = switch.register(Id::new(id)).await;
         Self {
             id,
             leader_id: Mutex::new(0),

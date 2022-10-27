@@ -16,7 +16,7 @@ use crate::{
     state::state::State,
 };
 
-use super::switch::{Message, Switch};
+use super::switch::{Id, Message, Switch};
 
 pub struct Server<T: CommandType> {
     pub state: Mutex<State<T>>,
@@ -33,7 +33,7 @@ where
     PersistentState<T>: Default,
 {
     pub async fn new(id: u32, switch: Arc<Switch<Request<T>>>) -> Self {
-        let (output, server_sender, input) = switch.register(id).await;
+        let (output, server_sender, input) = switch.register(Id::new(id)).await;
         Self {
             input,
             output,
