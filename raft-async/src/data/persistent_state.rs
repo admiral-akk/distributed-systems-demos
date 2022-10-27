@@ -1,7 +1,5 @@
 use std::collections::HashSet;
 
-use crate::server::switch::Id;
-
 use super::{
     data_type::CommandType,
     request::{Event, Insert, Vote},
