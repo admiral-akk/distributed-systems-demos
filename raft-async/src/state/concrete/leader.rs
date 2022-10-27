@@ -4,7 +4,7 @@ use crate::data::{
     data_type::CommandType,
     persistent_state::PersistentState,
     request::{
-        Append, AppendResponse, Client, ClientResponse, Event, Request, Timeout, Vote, VoteResponse,
+        Client, ClientResponse, Event, Insert, InsertResponse, Request, Timeout, Vote, VoteResponse,
     },
     volitile_state::VolitileState,
 };
@@ -49,7 +49,7 @@ impl Leader {
             sender: persistent_state.id,
             reciever: server,
             term: persistent_state.current_term,
-            event: persistent_state.append(
+            event: persistent_state.insert(
                 self.next_index[&server],
                 1,
                 volitile_state.commit_index,
@@ -111,15 +111,15 @@ impl<T: CommandType> EventHandler<Timeout, T> for Leader {
         (self.send_heartbeat(volitile_state, persistent_state), None)
     }
 }
-impl<T: CommandType> EventHandler<Append<T>, T> for Leader {}
-impl<T: CommandType> EventHandler<AppendResponse, T> for Leader {
+impl<T: CommandType> EventHandler<Insert<T>, T> for Leader {}
+impl<T: CommandType> EventHandler<InsertResponse, T> for Leader {
     fn handle_event(
         &mut self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         sender: u32,
         _term: u32,
-        event: AppendResponse,
+        event: InsertResponse,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         let next_index = self.next_index[&sender];
         if event.success {
@@ -205,7 +205,7 @@ mod tests {
             assert!(request.sender == persistent_state.id);
             assert!(request.term == persistent_state.current_term);
             match request.event {
-                Event::Append(event) => {
+                Event::Insert(event) => {
                     assert_eq!(event.prev_log_state.length, 2);
                     assert_eq!(event.prev_log_state.term, 3);
                     assert_eq!(event.leader_commit, 1);
@@ -261,7 +261,7 @@ mod tests {
             assert!(request.sender == persistent_state.id);
             assert!(request.term == persistent_state.current_term);
             match request.event {
-                Event::Append(event) => {
+                Event::Insert(event) => {
                     assert_eq!(event.prev_log_state.length, 2);
                     assert_eq!(event.prev_log_state.term, 3);
                     assert_eq!(event.leader_commit, 1);
@@ -300,7 +300,7 @@ mod tests {
             sender: 4,
             reciever: persistent_state.id,
             term: 3,
-            event: Event::AppendResponse(request::AppendResponse { success: true }),
+            event: Event::InsertResponse(request::InsertResponse { success: true }),
         };
 
         let mut leader = Leader {
@@ -344,7 +344,7 @@ mod tests {
             sender: 0,
             reciever: persistent_state.id,
             term: 3,
-            event: Event::AppendResponse(request::AppendResponse { success: true }),
+            event: Event::InsertResponse(request::InsertResponse { success: true }),
         };
 
         let mut leader = Leader {
@@ -388,7 +388,7 @@ mod tests {
             sender: 0,
             reciever: persistent_state.id,
             term: 3,
-            event: Event::AppendResponse(request::AppendResponse { success: false }),
+            event: Event::InsertResponse(request::InsertResponse { success: false }),
         };
 
         let mut leader = Leader {

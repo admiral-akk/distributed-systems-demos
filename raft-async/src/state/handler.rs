@@ -4,7 +4,7 @@ use crate::data::{
     data_type::CommandType,
     persistent_state::PersistentState,
     request::{
-        Append, AppendResponse, Client, ClientResponse, Event, Request, Timeout, Vote, VoteResponse,
+        Client, ClientResponse, Event, Insert, InsertResponse, Request, Timeout, Vote, VoteResponse,
     },
     volitile_state::VolitileState,
 };
@@ -29,8 +29,8 @@ pub trait EventHandler<EventType, T: CommandType> {
 }
 
 pub trait Handler<T: CommandType>:
-    EventHandler<Append<T>, T>
-    + EventHandler<AppendResponse, T>
+    EventHandler<Insert<T>, T>
+    + EventHandler<InsertResponse, T>
     + EventHandler<Timeout, T>
     + EventHandler<Vote, T>
     + EventHandler<VoteResponse, T>
@@ -45,10 +45,10 @@ pub trait Handler<T: CommandType>:
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         let (sender, term) = (request.sender, request.term);
         match request.event {
-            Event::Append(event) => {
+            Event::Insert(event) => {
                 self.handle_event(volitile_state, persistent_state, sender, term, event)
             }
-            Event::AppendResponse(event) => {
+            Event::InsertResponse(event) => {
                 self.handle_event(volitile_state, persistent_state, sender, term, event)
             }
             Event::Vote(event) => {

@@ -20,8 +20,8 @@ impl<T: CommandType + Send> Message for Request<T> {
 }
 
 pub enum Event<T: CommandType> {
-    Append(Append<T>),
-    AppendResponse(AppendResponse),
+    Insert(Insert<T>),
+    InsertResponse(InsertResponse),
     Vote(Vote),
     VoteResponse(VoteResponse),
     Timeout(Timeout),
@@ -38,19 +38,19 @@ pub enum ClientResponse<T: CommandType> {
     Success { data: T },
 }
 
-pub struct Append<T: CommandType> {
+pub struct Insert<T: CommandType> {
     pub prev_log_state: LogState,
     pub entries: Vec<Entry<T>>,
     pub leader_commit: usize,
 }
-impl<T: CommandType> Append<T> {
+impl<T: CommandType> Insert<T> {
     pub fn max_commit_index(&self) -> usize {
         self.leader_commit
             .min(self.prev_log_state.length + self.entries.len())
     }
 }
 
-pub struct AppendResponse {
+pub struct InsertResponse {
     pub success: bool,
 }
 pub struct Vote {

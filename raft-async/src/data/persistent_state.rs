@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use super::{
     data_type::CommandType,
-    request::{Append, Event},
+    request::{Event, Insert},
 };
 
 #[derive(Default)]
@@ -40,19 +40,19 @@ impl<T: CommandType> PersistentState<T> {
         });
     }
 
-    pub fn append(&self, index: usize, max_length: usize, commit_index: usize) -> Event<T> {
+    pub fn insert(&self, index: usize, max_length: usize, commit_index: usize) -> Event<T> {
         let entries = match index < self.log.len() {
             true => Vec::from(&self.log[index..(index + max_length).min(self.log.len())]),
             false => Vec::new(),
         };
-        Event::Append(Append {
+        Event::Insert(Insert {
             prev_log_state: self.log_state_at(index).unwrap(),
             entries,
             leader_commit: commit_index,
         })
     }
 
-    pub fn try_append(&mut self, event: Append<T>) -> bool {
+    pub fn try_insert(&mut self, event: Insert<T>) -> bool {
         let log_state = self.log_state_at(event.prev_log_state.length);
 
         // If we don't have an entry at the prev_index, or if the terms don't match, we fail.

@@ -5,7 +5,7 @@ use crate::data::{
     data_type::CommandType,
     persistent_state::PersistentState,
     request::{
-        Append, AppendResponse, Client, ClientResponse, Event, Request, Timeout, Vote, VoteResponse,
+        Client, ClientResponse, Event, Insert, InsertResponse, Request, Timeout, Vote, VoteResponse,
     },
     volitile_state::VolitileState,
 };
@@ -29,7 +29,7 @@ impl<T: CommandType> Handler<T> for Candidate {}
 impl<T: CommandType> EventHandler<Vote, T> for Candidate {}
 impl<T: CommandType> EventHandler<Client<T>, T> for Candidate {}
 impl<T: CommandType> EventHandler<ClientResponse<T>, T> for Candidate {}
-impl<T: CommandType> EventHandler<AppendResponse, T> for Candidate {}
+impl<T: CommandType> EventHandler<InsertResponse, T> for Candidate {}
 impl<T: CommandType> EventHandler<Timeout, T> for Candidate {
     fn handle_event(
         &mut self,
@@ -48,14 +48,14 @@ impl<T: CommandType> EventHandler<Timeout, T> for Candidate {
     }
 }
 
-impl<T: CommandType> EventHandler<Append<T>, T> for Candidate {
+impl<T: CommandType> EventHandler<Insert<T>, T> for Candidate {
     fn handle_event(
         &mut self,
         _volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         sender: u32,
         term: u32,
-        _event: Append<T>,
+        _event: Insert<T>,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         if term >= persistent_state.current_term {
             persistent_state.keep_alive += 1;
@@ -454,7 +454,7 @@ mod tests {
             sender: 0,
             reciever: persistent_state.id,
             term: 3,
-            event: Event::Append(request::Append {
+            event: Event::Insert(request::Insert {
                 prev_log_state: persistent_state.log_state(),
                 entries: entries.clone(),
                 leader_commit: 12,
@@ -503,7 +503,7 @@ mod tests {
             sender: 0,
             reciever: persistent_state.id,
             term: 4,
-            event: Event::Append(request::Append {
+            event: Event::Insert(request::Insert {
                 prev_log_state: persistent_state.log_state(),
                 entries: entries.clone(),
                 leader_commit: 12,

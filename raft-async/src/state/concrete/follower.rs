@@ -5,7 +5,7 @@ use crate::{
         data_type::CommandType,
         persistent_state::PersistentState,
         request::{
-            Append, AppendResponse, Client, ClientResponse, Event, Request, Timeout, Vote,
+            Client, ClientResponse, Event, Insert, InsertResponse, Request, Timeout, Vote,
             VoteResponse,
         },
         volitile_state::VolitileState,
@@ -27,7 +27,7 @@ impl TimeoutHandler for Follower {
     }
 }
 
-impl<T: CommandType> EventHandler<AppendResponse, T> for Follower {}
+impl<T: CommandType> EventHandler<InsertResponse, T> for Follower {}
 impl<T: CommandType> EventHandler<Timeout, T> for Follower {
     fn handle_event(
         &mut self,
@@ -80,14 +80,14 @@ impl<T: CommandType> EventHandler<Vote, T> for Follower {
     }
 }
 
-impl<T: CommandType> EventHandler<Append<T>, T> for Follower {
+impl<T: CommandType> EventHandler<Insert<T>, T> for Follower {
     fn handle_event(
         &mut self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         sender: u32,
         term: u32,
-        event: Append<T>,
+        event: Insert<T>,
     ) -> (Vec<Request<T>>, Option<RaftState>) {
         let mut success = persistent_state.current_term <= term;
         if success {
@@ -97,7 +97,7 @@ impl<T: CommandType> EventHandler<Append<T>, T> for Follower {
         }
         let max_commit_index = event.max_commit_index();
         if success {
-            success = persistent_state.try_append(event);
+            success = persistent_state.try_insert(event);
         }
 
         if success {
@@ -109,7 +109,7 @@ impl<T: CommandType> EventHandler<Append<T>, T> for Follower {
                 sender: persistent_state.id,
                 reciever: sender,
                 term: persistent_state.current_term,
-                event: Event::AppendResponse(AppendResponse { success }),
+                event: Event::InsertResponse(InsertResponse { success }),
             }]),
             None,
         )
@@ -238,7 +238,7 @@ mod tests {
             sender: 0,
             reciever: persistent_state.id,
             term: 4,
-            event: Event::Append(request::Append {
+            event: Event::Insert(request::Insert {
                 prev_log_state: LogState { term: 2, length: 2 },
                 entries: Vec::from([Entry {
                     term: 3,
@@ -264,7 +264,7 @@ mod tests {
             assert!(request.reciever == 0);
             assert!(request.term == persistent_state.current_term);
             match request.event {
-                Event::AppendResponse(event) => {
+                Event::InsertResponse(event) => {
                     assert!(!event.success);
                 }
                 _ => {
@@ -304,7 +304,7 @@ mod tests {
             sender: 0,
             reciever: persistent_state.id,
             term: 4,
-            event: Event::Append(request::Append {
+            event: Event::Insert(request::Insert {
                 prev_log_state: LogState {
                     term: 2,
                     length: 10,
@@ -330,7 +330,7 @@ mod tests {
             assert!(request.reciever == 0);
             assert!(request.term == persistent_state.current_term);
             match request.event {
-                Event::AppendResponse(event) => {
+                Event::InsertResponse(event) => {
                     assert!(!event.success);
                 }
                 _ => {
@@ -370,7 +370,7 @@ mod tests {
             sender: 0,
             reciever: persistent_state.id,
             term: 4,
-            event: Event::Append(request::Append {
+            event: Event::Insert(request::Insert {
                 prev_log_state: LogState { term: 3, length: 2 },
                 entries: Vec::from([Entry {
                     term: 3,
@@ -393,7 +393,7 @@ mod tests {
             assert!(request.reciever == 0);
             assert!(request.term == persistent_state.current_term);
             match request.event {
-                Event::AppendResponse(event) => {
+                Event::InsertResponse(event) => {
                     assert!(!event.success);
                 }
                 _ => {
@@ -437,7 +437,7 @@ mod tests {
             sender: 0,
             reciever: persistent_state.id,
             term: 4,
-            event: Event::Append(request::Append {
+            event: Event::Insert(request::Insert {
                 prev_log_state: LogState { term: 2, length: 2 },
                 entries: entries.clone(),
                 leader_commit: 2,
@@ -457,7 +457,7 @@ mod tests {
             assert!(request.reciever == 0);
             assert!(request.term == persistent_state.current_term);
             match request.event {
-                Event::AppendResponse(event) => {
+                Event::InsertResponse(event) => {
                     assert!(event.success);
                 }
                 _ => {
@@ -511,7 +511,7 @@ mod tests {
             sender: 0,
             reciever: persistent_state.id,
             term: 4,
-            event: Event::Append(request::Append {
+            event: Event::Insert(request::Insert {
                 prev_log_state: LogState { term: 2, length: 2 },
                 entries: entries.clone(),
                 leader_commit: 12,
@@ -531,7 +531,7 @@ mod tests {
             assert!(request.reciever == 0);
             assert!(request.term == persistent_state.current_term);
             match request.event {
-                Event::AppendResponse(event) => {
+                Event::InsertResponse(event) => {
                     assert!(event.success);
                 }
                 _ => {

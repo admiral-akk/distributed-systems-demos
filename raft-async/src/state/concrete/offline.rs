@@ -5,7 +5,7 @@ use crate::{
         data_type::CommandType,
         persistent_state::PersistentState,
         request::{
-            Append, AppendResponse, Client, ClientResponse, Request, Timeout, Vote, VoteResponse,
+            Client, ClientResponse, Insert, InsertResponse, Request, Timeout, Vote, VoteResponse,
         },
         volitile_state::VolitileState,
     },
@@ -28,7 +28,7 @@ impl TimeoutHandler for Offline {
 
 impl<T: CommandType> Handler<T> for Offline {}
 
-impl<T: CommandType> EventHandler<Append<T>, T> for Offline {}
+impl<T: CommandType> EventHandler<Insert<T>, T> for Offline {}
 impl<T: CommandType> EventHandler<Client<T>, T> for Offline {}
 impl<T: CommandType> EventHandler<ClientResponse<T>, T> for Offline {}
 
@@ -52,7 +52,7 @@ impl<T: CommandType> EventHandler<Timeout, T> for Offline {
     }
 }
 
-impl<T: CommandType> EventHandler<AppendResponse, T> for Offline {}
+impl<T: CommandType> EventHandler<InsertResponse, T> for Offline {}
 
 #[cfg(test)]
 mod tests {
