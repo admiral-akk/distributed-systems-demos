@@ -1,11 +1,9 @@
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
 use crate::data::{
     data_type::CommandType,
     persistent_state::PersistentState,
-    request::{
-        Client, Event, InsertResponse, Request, Tick,
-    },
+    request::{Client, Event, InsertResponse, Request, Tick},
     volitile_state::VolitileState,
 };
 use crate::state::{
@@ -13,7 +11,7 @@ use crate::state::{
     raft_state::RaftState,
 };
 
-use super::{candidate::Candidate};
+use super::candidate::Candidate;
 
 pub struct Leader {
     pub next_index: HashMap<u32, usize>,

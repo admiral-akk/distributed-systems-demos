@@ -1,13 +1,10 @@
-use std::{collections::HashSet};
+use std::collections::HashSet;
 
 use super::{follower::Follower, leader::Leader};
 use crate::data::{
     data_type::CommandType,
     persistent_state::PersistentState,
-    request::{
-        Event, Request, Tick, Vote,
-        VoteResponse,
-    },
+    request::{Event, Request, Tick, Vote, VoteResponse},
     volitile_state::VolitileState,
 };
 use crate::state::{
@@ -99,7 +96,7 @@ mod tests {
 
     use crate::data::persistent_state::{Config, Entry};
     use crate::data::request;
-    
+
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 

@@ -1,9 +1,7 @@
 use crate::data::{
     data_type::CommandType,
     persistent_state::PersistentState,
-    request::{
-        Event, Request,
-    },
+    request::{Event, Request},
     volitile_state::VolitileState,
 };
 

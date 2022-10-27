@@ -2,9 +2,7 @@ use crate::{
     data::{
         data_type::CommandType,
         persistent_state::PersistentState,
-        request::{
-            Event, Request, Tick,
-        },
+        request::{Event, Request, Tick},
         volitile_state::VolitileState,
     },
     state::{

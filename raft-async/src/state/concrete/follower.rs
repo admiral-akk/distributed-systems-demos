@@ -1,13 +1,8 @@
-
-
 use crate::{
     data::{
         data_type::CommandType,
         persistent_state::PersistentState,
-        request::{
-            ClientResponse, Event, InsertResponse, Request, Tick,
-            VoteResponse,
-        },
+        request::{ClientResponse, Event, InsertResponse, Request, Tick, VoteResponse},
         volitile_state::VolitileState,
     },
     state::{
@@ -16,7 +11,7 @@ use crate::{
     },
 };
 
-use super::{candidate::Candidate};
+use super::candidate::Candidate;
 
 #[derive(Default)]
 pub struct Follower {}
