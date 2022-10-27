@@ -171,8 +171,7 @@ impl<T: CommandType> EventHandler<ClientResponse<T>, T> for Follower {}
 mod tests {
     use std::collections::HashSet;
 
-    use crate::data::entry::Entry;
-    use crate::data::persistent_state::Config;
+    use crate::data::persistent_state::{Config, Entry};
     use crate::data::request;
     use crate::state::concrete::follower::Follower;
     // Note this useful idiom: importing names from outer (for mod tests) scope.

@@ -1,7 +1,6 @@
 use crate::server::switch::{Id, Message};
 
-use super::data_type::CommandType;
-use super::entry::Entry;
+use super::{data_type::CommandType, persistent_state::Entry};
 
 pub struct Request<T: CommandType> {
     // Todo: figure out better framing for sender/reciever/term, since it's not relevant to all events.

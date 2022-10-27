@@ -1,10 +1,16 @@
 use std::collections::HashSet;
 
-use super::{data_type::CommandType, entry::Entry};
+use super::data_type::CommandType;
 
 #[derive(Default)]
 pub struct Config {
     pub servers: HashSet<u32>,
+}
+
+#[derive(Clone, PartialEq)]
+pub struct Entry<T: Clone> {
+    pub term: u32,
+    pub command: T,
 }
 
 #[derive(Default)]

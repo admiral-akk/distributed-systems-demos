@@ -2,7 +2,6 @@ use std::{collections::HashMap, time::Duration};
 
 use crate::data::{
     data_type::CommandType,
-    entry::Entry,
     persistent_state::PersistentState,
     request::{
         Append, AppendResponse, Client, ClientResponse, Event, Request, Timeout, Vote, VoteResponse,
@@ -162,8 +161,7 @@ impl<T: CommandType> EventHandler<AppendResponse, T> for Leader {
 mod tests {
     use std::collections::HashSet;
 
-    use crate::data::entry::Entry;
-    use crate::data::persistent_state::Config;
+    use crate::data::persistent_state::{Config, Entry};
     use crate::data::request;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
