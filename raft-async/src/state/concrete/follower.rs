@@ -1,11 +1,11 @@
-use std::time::Duration;
+
 
 use crate::{
     data::{
         data_type::CommandType,
         persistent_state::PersistentState,
         request::{
-            Client, ClientResponse, Crash, Event, Insert, InsertResponse, Request, Tick, Vote,
+            ClientResponse, Event, InsertResponse, Request, Tick,
             VoteResponse,
         },
         volitile_state::VolitileState,
@@ -16,7 +16,7 @@ use crate::{
     },
 };
 
-use super::{candidate::Candidate, offline::Offline};
+use super::{candidate::Candidate};
 
 #[derive(Default)]
 pub struct Follower {}
@@ -24,7 +24,7 @@ const TICK_TILL_ELECTION: u32 = 25;
 impl Handler for Follower {}
 impl EventHandler for Follower {
     fn handle<T: CommandType>(
-        mut self,
+        self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         sender: u32,
@@ -132,7 +132,7 @@ mod tests {
             commit_index: 0,
             tick_since_start: 0,
         };
-        let mut follower = Follower::default();
+        let follower = Follower::default();
         let _term = persistent_state.current_term;
         let request: Request<u32> = Request {
             sender: 10,
@@ -177,7 +177,7 @@ mod tests {
             commit_index: 0,
             tick_since_start: 1000000,
         };
-        let mut follower = Follower::default();
+        let follower = Follower::default();
         let term = persistent_state.current_term;
         let request: Request<u32> = Request {
             sender: 10,
@@ -234,7 +234,7 @@ mod tests {
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
-        let mut follower = Follower::default();
+        let follower = Follower::default();
         let original_request: Request<u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
@@ -303,7 +303,7 @@ mod tests {
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
-        let mut follower = Follower::default();
+        let follower = Follower::default();
         let original_request: Request<u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
@@ -371,7 +371,7 @@ mod tests {
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
-        let mut follower = Follower::default();
+        let follower = Follower::default();
         let original_request: Request<u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
@@ -436,7 +436,7 @@ mod tests {
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
-        let mut follower = Follower::default();
+        let follower = Follower::default();
         let entries = Vec::from([Entry {
             term: 3,
             command: 5,
@@ -512,7 +512,7 @@ mod tests {
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
-        let mut follower = Follower::default();
+        let follower = Follower::default();
         let entries = Vec::from([Entry {
             term: 4,
             command: 5,
@@ -589,7 +589,7 @@ mod tests {
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
-        let mut follower = Follower::default();
+        let follower = Follower::default();
         let original_request: Request<u32> = Request {
             sender: 2,
             reciever: persistent_state.id,
@@ -656,7 +656,7 @@ mod tests {
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
-        let mut follower = Follower::default();
+        let follower = Follower::default();
         let original_request: Request<u32> = Request {
             sender: 2,
             reciever: persistent_state.id,
@@ -723,7 +723,7 @@ mod tests {
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
-        let mut follower = Follower::default();
+        let follower = Follower::default();
         let original_request: Request<u32> = Request {
             sender: 2,
             reciever: persistent_state.id,
@@ -790,7 +790,7 @@ mod tests {
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
-        let mut follower = Follower::default();
+        let follower = Follower::default();
         let original_request: Request<u32> = Request {
             sender: 2,
             reciever: persistent_state.id,
@@ -857,7 +857,7 @@ mod tests {
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
-        let mut follower = Follower::default();
+        let follower = Follower::default();
         let original_request: Request<u32> = Request {
             sender: 2,
             reciever: persistent_state.id,
@@ -926,7 +926,7 @@ mod tests {
             event: Event::Client(request::Client { data: 2 }),
         };
 
-        let mut follower = Follower {};
+        let follower = Follower {};
 
         let (requests, next) =
             follower.handle_request(&mut volitile_state, &mut persistent_state, request);
@@ -988,7 +988,7 @@ mod tests {
             event: Event::Client(request::Client { data: 2 }),
         };
 
-        let mut follower = Follower {};
+        let follower = Follower {};
 
         let (requests, next) =
             follower.handle_request(&mut volitile_state, &mut persistent_state, request);

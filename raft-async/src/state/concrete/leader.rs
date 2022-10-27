@@ -1,11 +1,10 @@
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap};
 
 use crate::data::{
     data_type::CommandType,
     persistent_state::PersistentState,
     request::{
-        self, Client, ClientResponse, Crash, Event, Insert, InsertResponse, Request, Tick, Vote,
-        VoteResponse,
+        Client, Event, InsertResponse, Request, Tick,
     },
     volitile_state::VolitileState,
 };
@@ -14,7 +13,7 @@ use crate::state::{
     raft_state::RaftState,
 };
 
-use super::{candidate::Candidate, offline::Offline};
+use super::{candidate::Candidate};
 
 pub struct Leader {
     pub next_index: HashMap<u32, usize>,
@@ -84,7 +83,7 @@ impl EventHandler for Leader {
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         sender: u32,
-        term: u32,
+        _term: u32,
         request: Request<T>,
     ) -> (Vec<Request<T>>, RaftState) {
         match request.event {
@@ -230,7 +229,7 @@ mod tests {
             term: 0,
             event: Event::Tick(request::Tick),
         };
-        let mut leader = Leader {
+        let leader = Leader {
             next_index: HashMap::from([(0, 2), (2, 2), (3, 2), (4, 2)]),
             match_index: HashMap::from([(0, 0), (2, 0), (3, 0), (4, 0)]),
         };
@@ -293,7 +292,7 @@ mod tests {
             event: Event::InsertResponse(request::InsertResponse { success: true }),
         };
 
-        let mut leader = Leader {
+        let leader = Leader {
             next_index: HashMap::from([(0, 2), (2, 2), (3, 2), (4, 1)]),
             match_index: HashMap::from([(0, 0), (2, 0), (3, 0), (4, 0)]),
         };
@@ -342,7 +341,7 @@ mod tests {
             event: Event::InsertResponse(request::InsertResponse { success: true }),
         };
 
-        let mut leader = Leader {
+        let leader = Leader {
             next_index: HashMap::from([(0, 2), (2, 2), (3, 2), (4, 1)]),
             match_index: HashMap::from([(0, 0), (2, 0), (3, 0), (4, 0)]),
         };
@@ -391,7 +390,7 @@ mod tests {
             event: Event::InsertResponse(request::InsertResponse { success: false }),
         };
 
-        let mut leader = Leader {
+        let leader = Leader {
             next_index: HashMap::from([(0, 2), (2, 2), (3, 2), (4, 1)]),
             match_index: HashMap::from([(0, 0), (2, 0), (3, 0), (4, 0)]),
         };
@@ -441,7 +440,7 @@ mod tests {
             event: Event::Client(request::Client { data: 2 }),
         };
 
-        let mut leader = Leader {
+        let leader = Leader {
             next_index: HashMap::from([(0, 2), (2, 2), (3, 2), (4, 1)]),
             match_index: HashMap::from([(0, 0), (2, 0), (3, 0), (4, 0)]),
         };

@@ -3,8 +3,7 @@ use crate::{
         data_type::CommandType,
         persistent_state::PersistentState,
         request::{
-            self, Client, ClientResponse, Crash, Event, Insert, InsertResponse, Request, Tick,
-            Vote, VoteResponse,
+            Event, Request, Tick,
         },
         volitile_state::VolitileState,
     },
@@ -24,11 +23,11 @@ const TICK_TO_REBOOT: u32 = 100;
 
 impl EventHandler for Offline {
     fn handle<T: CommandType>(
-        mut self,
+        self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-        sender: u32,
-        term: u32,
+        _sender: u32,
+        _term: u32,
         request: Request<T>,
     ) -> (Vec<Request<T>>, RaftState) {
         match request.event {
@@ -79,7 +78,7 @@ mod tests {
             commit_index: 0,
             tick_since_start: 0,
         };
-        let mut follower = Offline {};
+        let follower = Offline {};
         let request: Request<u32> = Request {
             sender: 10,
             reciever: persistent_state.id,
@@ -125,7 +124,7 @@ mod tests {
             commit_index: 1000,
             tick_since_start: 100000,
         };
-        let mut follower = Offline {};
+        let follower = Offline {};
         let request: Request<u32> = Request {
             sender: 10,
             reciever: persistent_state.id,

@@ -1,11 +1,11 @@
-use std::{collections::HashSet, time::Duration};
+use std::{collections::HashSet};
 
-use super::{follower::Follower, leader::Leader, offline::Offline};
+use super::{follower::Follower, leader::Leader};
 use crate::data::{
     data_type::CommandType,
     persistent_state::PersistentState,
     request::{
-        Client, ClientResponse, Crash, Event, Insert, InsertResponse, Request, Tick, Vote,
+        Event, Request, Tick, Vote,
         VoteResponse,
     },
     volitile_state::VolitileState,
@@ -99,7 +99,7 @@ mod tests {
 
     use crate::data::persistent_state::{Config, Entry};
     use crate::data::request;
-    use crate::state::concrete::candidate;
+    
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
@@ -125,7 +125,7 @@ mod tests {
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
-        let mut candidate = Candidate {
+        let candidate = Candidate {
             ..Default::default()
         };
         let request: Request<u32> = Request {
@@ -184,7 +184,7 @@ mod tests {
             commit_index: 0,
             tick_since_start: 100000,
         };
-        let mut candidate = Candidate {
+        let candidate = Candidate {
             ..Default::default()
         };
         let request: Request<u32> = Request {
@@ -243,7 +243,7 @@ mod tests {
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
-        let mut candidate = Candidate {
+        let candidate = Candidate {
             ..Default::default()
         };
         let request: Request<u32> = Request {
@@ -287,7 +287,7 @@ mod tests {
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
-        let mut candidate = Candidate {
+        let candidate = Candidate {
             ..Default::default()
         };
         let request: Request<u32> = Request {
@@ -331,7 +331,7 @@ mod tests {
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
-        let mut candidate = Candidate {
+        let candidate = Candidate {
             votes: HashSet::from([0]),
         };
         let request: Request<u32> = Request {
@@ -375,7 +375,7 @@ mod tests {
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
-        let mut candidate = Candidate {
+        let candidate = Candidate {
             votes: HashSet::from([0]),
         };
         let request: Request<u32> = Request {
@@ -419,7 +419,7 @@ mod tests {
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
-        let mut candidate = Candidate {
+        let candidate = Candidate {
             votes: HashSet::from([0]),
         };
         let entries = Vec::from([Entry {
@@ -469,7 +469,7 @@ mod tests {
             ..Default::default()
         };
         let mut volitile_state = VolitileState::default();
-        let mut candidate = Candidate {
+        let candidate = Candidate {
             votes: HashSet::from([0]),
         };
         let entries = Vec::from([Entry {

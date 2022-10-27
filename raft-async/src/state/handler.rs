@@ -2,8 +2,7 @@ use crate::data::{
     data_type::CommandType,
     persistent_state::PersistentState,
     request::{
-        self, Client, ClientResponse, Crash, Event, Insert, InsertResponse, Request, Tick,
-        VoteResponse,
+        Event, Request,
     },
     volitile_state::VolitileState,
 };
@@ -15,12 +14,12 @@ where
     Self: Into<RaftState>,
 {
     fn handle<T: CommandType>(
-        mut self,
-        volitile_state: &mut VolitileState,
-        persistent_state: &mut PersistentState<T>,
-        sender: u32,
-        term: u32,
-        request: Request<T>,
+        self,
+        _volitile_state: &mut VolitileState,
+        _persistent_state: &mut PersistentState<T>,
+        _sender: u32,
+        _term: u32,
+        _request: Request<T>,
     ) -> (Vec<Request<T>>, RaftState) {
         (Vec::default(), self.into())
     }
@@ -28,7 +27,7 @@ where
 
 pub trait Handler: EventHandler {
     fn handle_request<T: CommandType>(
-        mut self,
+        self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         request: Request<T>,

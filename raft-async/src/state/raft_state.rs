@@ -44,7 +44,7 @@ impl From<Candidate> for RaftState {
 
 impl RaftState {
     pub fn handle_request<T: CommandType>(
-        mut self,
+        self,
         request: Request<T>,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,

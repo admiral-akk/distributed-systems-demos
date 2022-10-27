@@ -2,7 +2,7 @@ use std::{collections::HashSet, time::Duration};
 
 use async_std::{
     channel::{Receiver, Sender},
-    sync::{Arc, Mutex},
+    sync::{Arc},
     task,
 };
 use rand::Rng;
