@@ -7,7 +7,13 @@ use async_std::{
 };
 use rand::Rng;
 
-pub struct Id(pub u32);
+pub struct Id(u32);
+
+impl Id {
+    pub fn new(id: u32) -> Id {
+        Id(id)
+    }
+}
 
 pub trait Message: Send + 'static {
     fn recipient(&self) -> Id;

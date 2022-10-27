@@ -15,7 +15,7 @@ pub struct Request<T: CommandType> {
 
 impl<T: CommandType + Send> Message for Request<T> {
     fn recipient(&self) -> Id {
-        Id(self.reciever)
+        Id::new(self.reciever)
     }
 }
 
