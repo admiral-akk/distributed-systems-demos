@@ -171,7 +171,7 @@ mod tests {
             tick_since_start: 0,
         };
         let mut follower = Follower::default();
-        let term = persistent_state.current_term;
+        let _term = persistent_state.current_term;
         let request: Request<u32> = Request {
             sender: 10,
             reciever: persistent_state.id,

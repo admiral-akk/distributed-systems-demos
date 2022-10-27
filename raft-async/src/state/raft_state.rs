@@ -1,4 +1,4 @@
-use std::time::Duration;
+
 
 use crate::data::{
     data_type::CommandType, persistent_state::PersistentState, request::Request,
@@ -7,7 +7,7 @@ use crate::data::{
 
 use super::{
     concrete::{candidate::Candidate, follower::Follower, leader::Leader, offline::Offline},
-    handler::{Handler, TimeoutHandler},
+    handler::{Handler},
 };
 pub enum RaftState {
     Offline(Offline),

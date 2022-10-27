@@ -1,4 +1,4 @@
-use std::time::Duration;
+
 
 use crate::{
     data::{
@@ -10,7 +10,7 @@ use crate::{
         volitile_state::VolitileState,
     },
     state::{
-        handler::{EventHandler, Handler, TimeoutHandler},
+        handler::{EventHandler, Handler},
         raft_state::RaftState,
     },
 };
