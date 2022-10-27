@@ -1,6 +1,9 @@
 use crate::server::switch::{Id, Message};
 
-use super::{data_type::CommandType, persistent_state::Entry};
+use super::{
+    data_type::CommandType,
+    persistent_state::{Entry, LogState},
+};
 
 pub struct Request<T: CommandType> {
     // Todo: figure out better framing for sender/reciever/term, since it's not relevant to all events.
@@ -36,8 +39,7 @@ pub enum ClientResponse<T: CommandType> {
 }
 
 pub struct Append<T: CommandType> {
-    pub prev_log_length: usize,
-    pub prev_log_term: u32,
+    pub prev_log_state: LogState,
     pub entries: Vec<Entry<T>>,
     pub leader_commit: usize,
 }
@@ -45,8 +47,7 @@ pub struct AppendResponse {
     pub success: bool,
 }
 pub struct Vote {
-    pub log_length: usize,
-    pub last_log_term: u32,
+    pub log_state: LogState,
 }
 pub struct VoteResponse {
     pub success: bool,

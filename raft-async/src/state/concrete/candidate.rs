@@ -95,8 +95,7 @@ impl Candidate {
                 reciever: *id,
                 term: persistent_state.current_term,
                 event: Event::Vote(Vote {
-                    log_length: persistent_state.log.len(),
-                    last_log_term: persistent_state.log_term(),
+                    log_state: persistent_state.log_state(),
                 }),
             })
             .collect()
@@ -168,8 +167,8 @@ mod tests {
             assert!(request.term == persistent_state.current_term);
             match request.event {
                 Event::Vote(event) => {
-                    assert!(event.last_log_term == 3);
-                    assert!(event.log_length == 2);
+                    assert!(event.log_state.term == 3);
+                    assert!(event.log_state.length == 2);
                 }
                 _ => {
                     panic!("Non-vote event!")
@@ -231,8 +230,8 @@ mod tests {
             assert!(request.term == persistent_state.current_term);
             match request.event {
                 Event::Vote(event) => {
-                    assert!(event.last_log_term == 3);
-                    assert!(event.log_length == 2);
+                    assert!(event.log_state.term == 3);
+                    assert!(event.log_state.length == 2);
                 }
                 _ => {
                     panic!("Non-vote event!")
@@ -456,8 +455,7 @@ mod tests {
             reciever: persistent_state.id,
             term: 3,
             event: Event::Append(request::Append {
-                prev_log_length: 2,
-                prev_log_term: 3,
+                prev_log_state: persistent_state.log_state(),
                 entries: entries.clone(),
                 leader_commit: 12,
             }),
@@ -506,8 +504,7 @@ mod tests {
             reciever: persistent_state.id,
             term: 4,
             event: Event::Append(request::Append {
-                prev_log_length: 2,
-                prev_log_term: 3,
+                prev_log_state: persistent_state.log_state(),
                 entries: entries.clone(),
                 leader_commit: 12,
             }),

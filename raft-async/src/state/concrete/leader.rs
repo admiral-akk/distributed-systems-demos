@@ -54,11 +54,7 @@ impl Leader {
             false => Vec::new(),
         };
         let event = Event::Append(Append {
-            prev_log_length: next_index,
-            prev_log_term: match next_index > 0 {
-                true => persistent_state.log[next_index - 1].term,
-                false => 0,
-            },
+            prev_log_state: persistent_state.log_state_at(next_index),
             entries,
             leader_commit: volitile_state.commit_index,
         });
@@ -217,8 +213,8 @@ mod tests {
             assert!(request.term == persistent_state.current_term);
             match request.event {
                 Event::Append(event) => {
-                    assert_eq!(event.prev_log_length, 2);
-                    assert_eq!(event.prev_log_term, 3);
+                    assert_eq!(event.prev_log_state.length, 2);
+                    assert_eq!(event.prev_log_state.term, 3);
                     assert_eq!(event.leader_commit, 1);
                     assert!(event.entries.is_empty());
                 }
@@ -273,8 +269,8 @@ mod tests {
             assert!(request.term == persistent_state.current_term);
             match request.event {
                 Event::Append(event) => {
-                    assert_eq!(event.prev_log_length, 2);
-                    assert_eq!(event.prev_log_term, 3);
+                    assert_eq!(event.prev_log_state.length, 2);
+                    assert_eq!(event.prev_log_state.term, 3);
                     assert_eq!(event.leader_commit, 1);
                     assert!(event.entries.is_empty());
                 }

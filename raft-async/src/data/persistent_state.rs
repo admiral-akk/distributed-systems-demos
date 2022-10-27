@@ -23,6 +23,11 @@ pub struct PersistentState<T: Clone> {
     pub keep_alive: u32,
 }
 
+pub struct LogState {
+    pub term: u32,
+    pub length: usize,
+}
+
 impl<T: CommandType> PersistentState<T> {
     pub fn push(&mut self, data: T) {
         self.log.push(Entry {
@@ -31,14 +36,17 @@ impl<T: CommandType> PersistentState<T> {
         });
     }
 
-    pub fn log_term(&self) -> u32 {
-        self.prev_log_term(self.log.len())
+    pub fn log_state(&self) -> LogState {
+        self.log_state_at(self.log.len())
     }
 
-    pub fn prev_log_term(&self, length: usize) -> u32 {
-        match length {
-            0 => 0,
-            length => self.log[length - 1].term,
+    pub fn log_state_at(&self, length: usize) -> LogState {
+        LogState {
+            term: match length {
+                0 => 0,
+                length => self.log[length - 1].term,
+            },
+            length,
         }
     }
 

@@ -57,10 +57,11 @@ impl<T: CommandType> EventHandler<Vote, T> for Follower {
             success &= voted_for != sender;
         }
         // Candidate log is at least as long as follower log
-        success &= event.log_length >= persistent_state.log.len();
-        if event.log_length == persistent_state.log.len() && event.log_length > 0 {
+        success &= event.log_state.length >= persistent_state.log.len();
+        if event.log_state.length == persistent_state.log.len() && event.log_state.length > 0 {
             // If they match length, then term of last log entry is at least as large
-            success &= persistent_state.log[event.log_length - 1].term <= event.last_log_term;
+            success &=
+                persistent_state.log[event.log_state.length - 1].term <= event.log_state.term;
         }
 
         if success {
@@ -96,16 +97,17 @@ impl<T: CommandType> EventHandler<Append<T>, T> for Follower {
             persistent_state.voted_for = Some(sender);
         }
         // If we don't have the previous entry, then the append fails.
-        success &= persistent_state.log.len() >= event.prev_log_length;
-        if success && event.prev_log_length > 0 {
+        success &= persistent_state.log.len() >= event.prev_log_state.length;
+        if success && event.prev_log_state.length > 0 {
             // If we have a previous entry, then the term needs to match.
-            success &= persistent_state.log[event.prev_log_length - 1].term == event.prev_log_term;
+            success &= persistent_state.log[event.prev_log_state.length - 1].term
+                == event.prev_log_state.term;
         }
 
         let entry_len = event.entries.len();
         if success {
             for (index, entry) in event.entries.into_iter().enumerate() {
-                let log_index = event.prev_log_length + index;
+                let log_index = event.prev_log_state.length + index;
                 if persistent_state.log.len() > log_index {
                     if persistent_state.log[log_index].term != entry.term {
                         persistent_state
@@ -123,8 +125,9 @@ impl<T: CommandType> EventHandler<Append<T>, T> for Follower {
 
         if event.leader_commit > volitile_state.commit_index {
             if success {
-                volitile_state.commit_index =
-                    event.leader_commit.min(event.prev_log_length + entry_len);
+                volitile_state.commit_index = event
+                    .leader_commit
+                    .min(event.prev_log_state.length + entry_len);
             }
         }
 
@@ -171,7 +174,7 @@ impl<T: CommandType> EventHandler<ClientResponse<T>, T> for Follower {}
 mod tests {
     use std::collections::HashSet;
 
-    use crate::data::persistent_state::{Config, Entry};
+    use crate::data::persistent_state::{Config, Entry, LogState};
     use crate::data::request;
     use crate::state::concrete::follower::Follower;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -224,8 +227,8 @@ mod tests {
             assert!(request.term == persistent_state.current_term);
             match request.event {
                 Event::Vote(event) => {
-                    assert!(event.last_log_term == 2);
-                    assert!(event.log_length == 2);
+                    assert!(event.log_state.term == 2);
+                    assert!(event.log_state.length == 2);
                 }
                 _ => {
                     panic!("Non-vote event!")
@@ -263,8 +266,7 @@ mod tests {
             reciever: persistent_state.id,
             term: 4,
             event: Event::Append(request::Append {
-                prev_log_length: 2,
-                prev_log_term: 2,
+                prev_log_state: LogState { term: 2, length: 2 },
                 entries: Vec::from([Entry {
                     term: 3,
                     command: 5,
@@ -330,8 +332,10 @@ mod tests {
             reciever: persistent_state.id,
             term: 4,
             event: Event::Append(request::Append {
-                prev_log_length: 10,
-                prev_log_term: 2,
+                prev_log_state: LogState {
+                    term: 2,
+                    length: 10,
+                },
                 entries: Vec::from([Entry {
                     term: 3,
                     command: 5,
@@ -394,8 +398,7 @@ mod tests {
             reciever: persistent_state.id,
             term: 4,
             event: Event::Append(request::Append {
-                prev_log_length: 2,
-                prev_log_term: 3,
+                prev_log_state: LogState { term: 3, length: 2 },
                 entries: Vec::from([Entry {
                     term: 3,
                     command: 5,
@@ -462,8 +465,7 @@ mod tests {
             reciever: persistent_state.id,
             term: 4,
             event: Event::Append(request::Append {
-                prev_log_length: 2,
-                prev_log_term: 2,
+                prev_log_state: LogState { term: 2, length: 2 },
                 entries: entries.clone(),
                 leader_commit: 2,
             }),
@@ -537,8 +539,7 @@ mod tests {
             reciever: persistent_state.id,
             term: 4,
             event: Event::Append(request::Append {
-                prev_log_length: 2,
-                prev_log_term: 2,
+                prev_log_state: LogState { term: 2, length: 2 },
                 entries: entries.clone(),
                 leader_commit: 12,
             }),
@@ -609,8 +610,7 @@ mod tests {
             reciever: persistent_state.id,
             term: 3,
             event: Event::Vote(request::Vote {
-                log_length: 5,
-                last_log_term: 3,
+                log_state: LogState { term: 3, length: 5 },
             }),
         };
 
@@ -675,8 +675,7 @@ mod tests {
             reciever: persistent_state.id,
             term: 4,
             event: Event::Vote(request::Vote {
-                log_length: 3,
-                last_log_term: 4,
+                log_state: LogState { term: 4, length: 3 },
             }),
         };
 
@@ -741,8 +740,7 @@ mod tests {
             reciever: persistent_state.id,
             term: 4,
             event: Event::Vote(request::Vote {
-                log_length: 4,
-                last_log_term: 2,
+                log_state: LogState { term: 2, length: 4 },
             }),
         };
 
@@ -807,8 +805,7 @@ mod tests {
             reciever: persistent_state.id,
             term: 4,
             event: Event::Vote(request::Vote {
-                log_length: 4,
-                last_log_term: 3,
+                log_state: LogState { term: 3, length: 4 },
             }),
         };
 
@@ -873,8 +870,7 @@ mod tests {
             reciever: persistent_state.id,
             term: 4,
             event: Event::Vote(request::Vote {
-                log_length: 5,
-                last_log_term: 2,
+                log_state: LogState { term: 2, length: 5 },
             }),
         };
 
