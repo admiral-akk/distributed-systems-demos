@@ -1,20 +1,20 @@
 use std::collections::HashMap;
 
 use crate::{
-    data::data_type::OutputType,
+    data::{
+        data_type::CommandType,
+        persistent_state::{Entry, LatestConfig, PersistentState},
+        request::{ActiveConfig, Client, ClientResponse, Event, InsertResponse, Request, Tick},
+        volitile_state::VolitileState,
+    },
+    state::state::StateMachine,
+};
+use crate::{
+    data::{data_type::OutputType, request::Data},
     state::{
         handler::{EventHandler, Handler},
         raft_state::RaftState,
     },
-};
-use crate::{
-    data::{
-        data_type::CommandType,
-        persistent_state::{Entry, LatestConfig, PersistentState},
-        request::{ActiveConfig, Client, Event, InsertResponse, Request, Tick},
-        volitile_state::VolitileState,
-    },
-    state::state::StateMachine,
 };
 
 use super::{candidate::Candidate, follower::Follower};
@@ -121,8 +121,42 @@ impl EventHandler for Leader {
     {
         match request.event {
             Event::Client(Client { data }) => {
-                persistent_state.push(data);
-                (Vec::new(), self.into())
+                // If we are not in a stable config state, we cannot transition.
+                match data {
+                    Data::Command(_) => {
+                        persistent_state.push(data);
+                        (Vec::new(), self.into())
+                    }
+                    Data::Config(_) => {
+                        let latest_config =
+                            persistent_state.latest_config(volitile_state.commit_index);
+                        match latest_config {
+                            LatestConfig {
+                                config: ActiveConfig::Stable(_),
+                                committed: true,
+                            } => {
+                                persistent_state.push(data);
+                                (Vec::new(), self.into())
+                            }
+                            _ => {
+                                // fails, we're in the midst of a migration.
+                                (
+                                    [Request {
+                                        sender: persistent_state.id,
+                                        reciever: sender,
+                                        term: 0,
+                                        event: Event::ClientResponse(ClientResponse::Failed {
+                                            leader_id: Some(persistent_state.id),
+                                            data,
+                                        }),
+                                    }]
+                                    .into(),
+                                    self.into(),
+                                )
+                            }
+                        }
+                    }
+                }
             }
             Event::Tick(Tick) => self.send_heartbeat(volitile_state, persistent_state),
             Event::InsertResponse(InsertResponse { success }) => {
