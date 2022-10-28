@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{collections::HashSet, fmt::Debug};
 
 use crate::server::cluster::{Id, Message};
 
@@ -25,6 +25,26 @@ impl<T: CommandType + Send, Output: Debug + Send + 'static> Message for Request<
 pub enum ActiveConfig {
     Stable(Config),
     Transition { prev: Config, new: Config },
+}
+
+impl ActiveConfig {
+    pub fn servers(&self) -> HashSet<u32> {
+        match self {
+            ActiveConfig::Stable(config) => config.servers.clone(),
+            ActiveConfig::Transition { prev, new } => {
+                prev.servers.union(&new.servers).map(|id| *id).collect()
+            }
+        }
+    }
+
+    pub fn has_quorum(&self, matching: &HashSet<u32>) -> bool {
+        match self {
+            ActiveConfig::Stable(config) => config.has_quorum(matching),
+            ActiveConfig::Transition { prev, new } => {
+                prev.has_quorum(matching) && new.has_quorum(matching)
+            }
+        }
+    }
 }
 
 #[derive(Clone, PartialEq)]

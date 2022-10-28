@@ -52,7 +52,7 @@ pub struct LogState {
     pub length: usize,
 }
 
-struct LatestConfig {
+pub struct LatestConfig {
     pub config: ActiveConfig,
     pub committed: bool,
 }
@@ -69,12 +69,12 @@ impl LatestConfig {
 }
 
 impl<T: CommandType> PersistentState<T> {
-    fn latest_config(&self, commit_index: usize) -> LatestConfig {
+    pub fn latest_config(&self, commit_index: usize) -> LatestConfig {
         self.log
             .iter()
             .enumerate()
             .rev()
-            .filter(|(_, entry)| match entry.data {
+            .filter(|(i, entry)| match entry.data {
                 Data::Command(_) => false,
                 Data::Config(_) => true,
             })
@@ -174,18 +174,14 @@ impl<T: CommandType> PersistentState<T> {
         }
     }
 
-    pub fn has_quorum(&self, matching: &HashSet<u32>, commit_index: usize) -> bool {
-        let latest = self.latest_config(commit_index);
-        match latest.config {
-            ActiveConfig::Stable(config) => config.has_quorum(matching),
-            ActiveConfig::Transition { prev, new } => {
-                prev.has_quorum(matching) && new.has_quorum(matching)
-            }
-        }
+    pub fn has_quorum(&self, matching: &HashSet<u32>) -> bool {
+        self.latest_config(self.log.len())
+            .config
+            .has_quorum(matching)
     }
 
     pub fn other_servers(&self) -> Vec<u32> {
-        self.latest_config(0)
+        self.latest_config(self.log.len())
             .servers()
             .into_iter()
             .filter(|server| !self.id.eq(server))

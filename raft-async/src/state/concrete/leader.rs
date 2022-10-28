@@ -10,14 +10,14 @@ use crate::{
 use crate::{
     data::{
         data_type::CommandType,
-        persistent_state::PersistentState,
-        request::{Client, Event, InsertResponse, Request, Tick},
+        persistent_state::{Entry, LatestConfig, PersistentState},
+        request::{ActiveConfig, Client, Event, InsertResponse, Request, Tick},
         volitile_state::VolitileState,
     },
     state::state::StateMachine,
 };
 
-use super::candidate::Candidate;
+use super::{candidate::Candidate, follower::Follower};
 
 pub struct Leader {
     pub next_index: HashMap<u32, usize>,
@@ -26,15 +26,41 @@ pub struct Leader {
 
 impl Leader {
     pub fn send_heartbeat<T: CommandType, Output>(
-        &self,
+        self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-    ) -> Vec<Request<T, Output>> {
-        persistent_state
-            .other_servers()
-            .iter()
-            .map(|server| self.append_update(volitile_state, persistent_state, *server))
-            .collect()
+    ) -> (Vec<Request<T, Output>>, RaftState) {
+        let latest_config = persistent_state.latest_config(volitile_state.commit_index);
+
+        // If we recently committed a configuration that removes this server, it demotes itself.
+        if latest_config.committed
+            && !latest_config
+                .config
+                .servers()
+                .contains(&persistent_state.id)
+        {
+            return (Vec::new(), Follower.into());
+        }
+
+        // If we recently committed a configuration that transitions between two configurations, append the new configuration on its own.
+        match latest_config {
+            LatestConfig {
+                committed: true,
+                config: ActiveConfig::Transition { new, .. },
+            } => persistent_state
+                .log
+                .push(Entry::config(persistent_state.current_term, new.clone())),
+            _ => {}
+        };
+
+        (
+            persistent_state
+                .other_servers()
+                .iter()
+                .map(|server| self.append_update(volitile_state, persistent_state, *server))
+                .collect(),
+            self.into(),
+        )
     }
 
     fn append_update<T: CommandType, Output>(
@@ -56,7 +82,7 @@ impl Leader {
     }
 
     pub fn from_candidate<T: CommandType, Output>(
-        _candidate: &Candidate,
+        candidate: Candidate,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T, Output>>, RaftState) {
@@ -75,8 +101,7 @@ impl Leader {
                 .map(|id| (*id, 0))
                 .collect(),
         };
-        let heartbeat = leader.send_heartbeat(volitile_state, persistent_state);
-        (heartbeat, leader.into())
+        leader.send_heartbeat(volitile_state, persistent_state)
     }
 }
 
@@ -99,10 +124,7 @@ impl EventHandler for Leader {
                 persistent_state.push(data);
                 (Vec::new(), self.into())
             }
-            Event::Tick(Tick) => (
-                self.send_heartbeat(volitile_state, persistent_state),
-                self.into(),
-            ),
+            Event::Tick(Tick) => self.send_heartbeat(volitile_state, persistent_state),
             Event::InsertResponse(InsertResponse { success }) => {
                 let next_index = self.next_index[&sender];
                 if success {
@@ -120,7 +142,7 @@ impl EventHandler for Leader {
                     .map(|(id, _)| *id)
                     .collect();
 
-                if persistent_state.has_quorum(&matching_servers, volitile_state.commit_index) {
+                if persistent_state.has_quorum(&matching_servers) {
                     if volitile_state.try_update_commit_index(
                         state_machine,
                         persistent_state,
@@ -171,7 +193,7 @@ mod tests {
         };
 
         let (requests, next): (Vec<Request<_, u32>>, _) = Leader::from_candidate(
-            &Candidate::default(),
+            Candidate::default(),
             &mut volitile_state,
             &mut persistent_state,
         );

@@ -57,8 +57,8 @@ impl EventHandler for Candidate {
                     println!("{} voted for {}", sender, persistent_state.id);
                     self.votes.insert(sender);
                 }
-                if persistent_state.has_quorum(&self.votes, volitile_state.commit_index) {
-                    return Leader::from_candidate(&self, volitile_state, persistent_state);
+                if persistent_state.has_quorum(&self.votes) {
+                    return Leader::from_candidate(self, volitile_state, persistent_state);
                 }
                 (Vec::default(), self.into())
             }
