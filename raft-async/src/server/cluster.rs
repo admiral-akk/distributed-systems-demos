@@ -50,7 +50,7 @@ impl<In: CommandType, Out: OutputType> RaftCluster<Request<In, Out>> {
             initial_config: initial_config.clone(),
         });
         for server in initial_config.servers {
-            Server::init::<SM>(server, switch.clone());
+            task::spawn(Server::init::<SM>(server, switch.clone()));
         }
         task::spawn(RaftCluster::request_loop(switch.clone()));
         switch
@@ -65,9 +65,18 @@ impl<In: CommandType, Out: OutputType> RaftCluster<Request<In, Out>> {
                 }
                 let socket = {
                     let senders = switch.senders.lock().await;
-                    senders[&request.recipient()].clone()
+                    if senders.contains_key(&request.recipient()) {
+                        Some(senders[&request.recipient()].clone())
+                    } else {
+                        None
+                    }
                 };
-                socket.send(request).await;
+                match socket {
+                    Some(socket) => {
+                        socket.send(request).await;
+                    }
+                    _ => {}
+                }
             }
         }
     }
