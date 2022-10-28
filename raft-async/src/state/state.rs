@@ -1,7 +1,7 @@
 use crate::{
     data::{
         data_type::{CommandType, OutputType},
-        persistent_state::{Config, PersistentState},
+        persistent_state::{Config, Entry, PersistentState},
         request::Request,
         volitile_state::VolitileState,
     },
@@ -23,18 +23,26 @@ pub struct State<T: CommandType, SM> {
 }
 
 impl<T: CommandType, SM: Default> State<T, SM> {
-    pub fn new(id: u32, config: Config) -> Self {
+    pub fn new(id: u32, config: Option<Config>) -> Self {
         Self {
             state_machine: SM::default(),
+            volitile_state: VolitileState {
+                commit_index: match config.as_ref() {
+                    None => 0,
+                    Some(config) => 1,
+                },
+                ..Default::default()
+            },
             persistent_state: PersistentState {
                 id,
-                config,
                 current_term: 0,
                 voted_for: None,
-                log: Vec::new(),
+                log: match config.as_ref() {
+                    None => Vec::new(),
+                    Some(config) => [Entry::config(0, config.clone())].into(),
+                },
             },
             raft_state: RaftState::default(),
-            volitile_state: VolitileState::default(),
         }
     }
 

@@ -63,10 +63,13 @@ mod tests {
             servers: HashSet::from([0, 1, 2]),
         };
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 3,
-            log: Vec::from([Entry::command(1, 10), Entry::command(2, 4)]),
+            log: Vec::from([
+                Entry::config(0, config),
+                Entry::command(1, 10),
+                Entry::command(2, 4),
+            ]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState {
@@ -105,10 +108,13 @@ mod tests {
             servers: HashSet::from([0, 1, 2]),
         };
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 3,
-            log: Vec::from([Entry::command(1, 10), Entry::command(2, 4)]),
+            log: Vec::from([
+                Entry::config(0, config),
+                Entry::command(1, 10),
+                Entry::command(2, 4),
+            ]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState {

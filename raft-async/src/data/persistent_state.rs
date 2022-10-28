@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use super::{
     data_type::CommandType,
-    request::{Event, Insert, Vote},
+    request::{Data, Event, Insert, Vote},
 };
 
 #[derive(Default, Clone, PartialEq)]
@@ -11,29 +11,23 @@ pub struct Config {
 }
 
 #[derive(Clone, PartialEq)]
-pub enum EntryData<T> {
-    Command(T),
-    Config(Config),
-}
-
-#[derive(Clone, PartialEq)]
 pub struct Entry<T: Clone> {
     pub term: u32,
-    pub data: EntryData<T>,
+    pub data: Data<T>,
 }
 
 impl<T: Clone> Entry<T> {
     pub fn command(term: u32, data: T) -> Self {
         Entry {
             term,
-            data: EntryData::Command(data),
+            data: Data::Command(data),
         }
     }
 
     pub fn config(term: u32, config: Config) -> Self {
         Entry {
             term,
-            data: EntryData::Config(config),
+            data: Data::Config(config),
         }
     }
 }
@@ -44,7 +38,6 @@ pub struct PersistentState<T: Clone> {
     pub current_term: u32,
     pub voted_for: Option<u32>,
     pub log: Vec<Entry<T>>,
-    pub config: Config,
 }
 
 #[derive(PartialEq)]
@@ -53,9 +46,44 @@ pub struct LogState {
     pub length: usize,
 }
 
+pub enum ActiveConfig {
+    None,
+    Stable(Config),
+    Transition { prev: Config, latest: Config },
+}
+
 impl<T: CommandType> PersistentState<T> {
-    pub fn push(&mut self, data: T) {
-        self.log.push(Entry::command(self.current_term, data));
+    fn latest_configs(&self) -> ActiveConfig {
+        let mut configs = self.log.iter().rev().filter(|entry| match entry.data {
+            Data::Command(_) => false,
+            Data::Config(_) => true,
+        });
+        match configs.next() {
+            Some(Entry {
+                data: Data::Config(latest),
+                ..
+            }) => {
+                let latest = latest.clone();
+                match configs.next() {
+                    Some(Entry {
+                        data: Data::Config(prev),
+                        ..
+                    }) => {
+                        let prev = prev.clone();
+                        ActiveConfig::Transition { prev, latest }
+                    }
+                    _ => ActiveConfig::Stable(latest.clone()),
+                }
+            }
+            _ => ActiveConfig::None,
+        }
+    }
+
+    pub fn push(&mut self, data: Data<T>) {
+        self.log.push(Entry {
+            term: self.current_term,
+            data,
+        });
     }
 
     pub fn insert<Output>(
@@ -136,16 +164,38 @@ impl<T: CommandType> PersistentState<T> {
         }
     }
 
-    pub fn quorum(&self) -> usize {
-        self.config.servers.len() / 2 + 1
+    pub fn has_quorum(&self, matching: &HashSet<u32>) -> bool {
+        let latest = self.latest_configs();
+        match latest {
+            ActiveConfig::None => false,
+            ActiveConfig::Stable(config) => {
+                let valid_votes = config.servers.intersection(&matching).count();
+                valid_votes >= config.servers.len() / 2 + 1
+            }
+            ActiveConfig::Transition { prev, latest } => false,
+        }
     }
 
     pub fn other_servers(&self) -> Vec<u32> {
-        self.config
-            .servers
+        let latest = self
+            .log
             .iter()
-            .filter(|id| !self.id.eq(id))
-            .map(|id| *id)
-            .collect()
+            .rev()
+            .filter(|e| match e.data {
+                Data::Config(_) => true,
+                _ => false,
+            })
+            .next();
+        match latest {
+            Some(Entry {
+                data: Data::Config(Config { servers }),
+                ..
+            }) => servers
+                .iter()
+                .filter(|id| !self.id.eq(id))
+                .map(|id| *id)
+                .collect(),
+            _ => Vec::new(),
+        }
     }
 }

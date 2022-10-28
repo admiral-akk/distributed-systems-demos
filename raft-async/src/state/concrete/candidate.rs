@@ -57,7 +57,7 @@ impl EventHandler for Candidate {
                     println!("{} voted for {}", sender, persistent_state.id);
                     self.votes.insert(sender);
                 }
-                if self.votes.len() + 1 >= persistent_state.quorum() {
+                if persistent_state.has_quorum(&self.votes) {
                     return Leader::from_candidate(&self, volitile_state, persistent_state);
                 }
                 (Vec::default(), self.into())
@@ -115,10 +115,13 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2]),
         };
-        let log = Vec::from([Entry::command(1, 10), Entry::command(3, 4)]);
+        let log = Vec::from([
+            Entry::config(0, config),
+            Entry::command(1, 10),
+            Entry::command(3, 4),
+        ]);
 
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 3,
             log,
@@ -155,7 +158,7 @@ mod tests {
             match request.event {
                 Event::Vote(event) => {
                     assert!(event.log_state.term == 3);
-                    assert!(event.log_state.length == 2);
+                    assert!(event.log_state.length == 3);
                 }
                 _ => {
                     panic!("Non-vote event!")
@@ -169,10 +172,13 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
-        let log = Vec::from([Entry::command(1, 10), Entry::command(3, 4)]);
+        let log = Vec::from([
+            Entry::config(0, config),
+            Entry::command(1, 10),
+            Entry::command(3, 4),
+        ]);
 
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 3,
             log,
@@ -215,7 +221,7 @@ mod tests {
             match request.event {
                 Event::Vote(event) => {
                     assert!(event.log_state.term == 3);
-                    assert!(event.log_state.length == 2);
+                    assert!(event.log_state.length == 3);
                 }
                 _ => {
                     panic!("Non-vote event!")
@@ -229,10 +235,13 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
-        let log = Vec::from([Entry::command(1, 10), Entry::command(3, 4)]);
+        let log = Vec::from([
+            Entry::config(0, config),
+            Entry::command(1, 10),
+            Entry::command(3, 4),
+        ]);
 
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 3,
             log,
@@ -271,10 +280,13 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
-        let log = Vec::from([Entry::command(1, 10), Entry::command(3, 4)]);
+        let log = Vec::from([
+            Entry::config(0, config),
+            Entry::command(1, 10),
+            Entry::command(3, 4),
+        ]);
 
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 3,
             log,
@@ -313,10 +325,13 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
-        let log = Vec::from([Entry::command(1, 10), Entry::command(3, 4)]);
+        let log = Vec::from([
+            Entry::config(0, config),
+            Entry::command(1, 10),
+            Entry::command(3, 4),
+        ]);
 
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 3,
             log,
@@ -355,10 +370,13 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
-        let log = Vec::from([Entry::command(1, 10), Entry::command(3, 4)]);
+        let log = Vec::from([
+            Entry::config(0, config),
+            Entry::command(1, 10),
+            Entry::command(3, 4),
+        ]);
 
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 3,
             log,
@@ -366,7 +384,7 @@ mod tests {
         };
         let mut volitile_state = VolitileState::default();
         let candidate = Candidate {
-            votes: HashSet::from([0]),
+            votes: HashSet::from([0, 1]),
         };
         let request: Request<u32, u32> = Request {
             sender: 2,
@@ -396,10 +414,13 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
-        let log = Vec::from([Entry::command(1, 10), Entry::command(3, 4)]);
+        let log = Vec::from([
+            Entry::config(0, config),
+            Entry::command(1, 10),
+            Entry::command(3, 4),
+        ]);
 
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 4,
             log: log.clone(),
@@ -440,9 +461,12 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
-        let log = Vec::from([Entry::command(1, 10), Entry::command(3, 4)]);
+        let log = Vec::from([
+            Entry::config(0, config),
+            Entry::command(1, 10),
+            Entry::command(3, 4),
+        ]);
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 4,
             log: log.clone(),

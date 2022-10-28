@@ -107,7 +107,7 @@ mod tests {
     use std::collections::HashSet;
 
     use crate::data::persistent_state::{Config, Entry, LogState};
-    use crate::data::request;
+    use crate::data::request::{self, Data};
     use crate::state::concrete::follower::Follower;
     use crate::Sum;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -117,10 +117,13 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2]),
         };
-        let log = Vec::from([Entry::command(1, 10), Entry::command(2, 4)]);
+        let log = Vec::from([
+            Entry::config(0, config),
+            Entry::command(1, 10),
+            Entry::command(2, 4),
+        ]);
 
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 3,
             log,
@@ -161,10 +164,13 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2]),
         };
-        let log = Vec::from([Entry::command(1, 10), Entry::command(2, 4)]);
+        let log = Vec::from([
+            Entry::config(0, config),
+            Entry::command(1, 10),
+            Entry::command(2, 4),
+        ]);
 
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 3,
             log,
@@ -205,7 +211,7 @@ mod tests {
             match request.event {
                 Event::Vote(event) => {
                     assert!(event.log_state.term == 2);
-                    assert!(event.log_state.length == 2);
+                    assert!(event.log_state.length == 3);
                 }
                 _ => {
                     panic!("Non-vote event!")
@@ -219,10 +225,13 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2]),
         };
-        let log = Vec::from([Entry::command(1, 10), Entry::command(2, 4)]);
+        let log = Vec::from([
+            Entry::config(0, config),
+            Entry::command(1, 10),
+            Entry::command(2, 4),
+        ]);
 
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 6,
             log: log.clone(),
@@ -283,9 +292,12 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2]),
         };
-        let log = Vec::from([Entry::command(1, 10), Entry::command(2, 4)]);
+        let log = Vec::from([
+            Entry::config(0, config),
+            Entry::command(1, 10),
+            Entry::command(2, 4),
+        ]);
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 4,
             log: log.clone(),
@@ -345,10 +357,13 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2]),
         };
-        let log = Vec::from([Entry::command(1, 10), Entry::command(2, 4)]);
+        let log = Vec::from([
+            Entry::config(0, config),
+            Entry::command(1, 10),
+            Entry::command(2, 4),
+        ]);
 
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 4,
             log: log.clone(),
@@ -405,10 +420,13 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2]),
         };
-        let log = Vec::from([Entry::command(1, 10), Entry::command(2, 4)]);
+        let log = Vec::from([
+            Entry::config(0, config),
+            Entry::command(1, 10),
+            Entry::command(2, 4),
+        ]);
 
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 4,
             log: log.clone(),
@@ -422,7 +440,7 @@ mod tests {
             reciever: persistent_state.id,
             term: 4,
             event: Event::Insert(request::Insert {
-                prev_log_state: LogState { term: 2, length: 2 },
+                prev_log_state: LogState { term: 2, length: 3 },
                 entries: entries.clone(),
                 leader_commit: 2,
             }),
@@ -458,8 +476,8 @@ mod tests {
             }
         }
 
-        assert!(log[0..2].iter().eq(persistent_state.log[0..2].iter()));
-        assert!(entries[0..1].iter().eq(persistent_state.log[2..3].iter()));
+        assert!(log[0..3].iter().eq(persistent_state.log[0..3].iter()));
+        assert!(entries[0..1].iter().eq(persistent_state.log[3..4].iter()));
         assert!(volitile_state.get_commit_index() == 2);
     }
 
@@ -469,6 +487,7 @@ mod tests {
             servers: HashSet::from([0, 1, 2]),
         };
         let log = Vec::from([
+            Entry::config(0, config),
             Entry::command(1, 10),
             Entry::command(2, 4),
             Entry::command(3, 5),
@@ -476,7 +495,6 @@ mod tests {
         ]);
 
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 4,
             log: log.clone(),
@@ -490,7 +508,7 @@ mod tests {
             reciever: persistent_state.id,
             term: 4,
             event: Event::Insert(request::Insert {
-                prev_log_state: LogState { term: 2, length: 2 },
+                prev_log_state: LogState { term: 2, length: 3 },
                 entries: entries.clone(),
                 leader_commit: 12,
             }),
@@ -526,10 +544,10 @@ mod tests {
             }
         }
 
-        assert!(log[0..2].iter().eq(persistent_state.log[0..2].iter()));
-        assert!(entries[0..1].iter().eq(persistent_state.log[2..3].iter()));
-        assert!(persistent_state.log.len() == 3);
-        assert!(volitile_state.get_commit_index() == 3);
+        assert!(log[0..3].iter().eq(persistent_state.log[0..3].iter()));
+        assert!(entries[0..1].iter().eq(persistent_state.log[3..4].iter()));
+        assert!(persistent_state.log.len() == 4);
+        assert!(volitile_state.get_commit_index() == 4);
     }
 
     #[test]
@@ -538,13 +556,13 @@ mod tests {
             servers: HashSet::from([0, 1, 2]),
         };
         let log = Vec::from([
+            Entry::config(0, config),
             Entry::command(1, 10),
             Entry::command(2, 4),
             Entry::command(3, 5),
             Entry::command(3, 6),
         ]);
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 4,
             log: log.clone(),
@@ -599,13 +617,13 @@ mod tests {
             servers: HashSet::from([0, 1, 2]),
         };
         let log = Vec::from([
+            Entry::config(0, config),
             Entry::command(1, 10),
             Entry::command(2, 4),
             Entry::command(3, 5),
             Entry::command(3, 6),
         ]);
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 4,
             log: log.clone(),
@@ -660,13 +678,13 @@ mod tests {
             servers: HashSet::from([0, 1, 2]),
         };
         let log = Vec::from([
+            Entry::config(0, config),
             Entry::command(1, 10),
             Entry::command(2, 4),
             Entry::command(3, 5),
             Entry::command(3, 6),
         ]);
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 4,
             log: log.clone(),
@@ -721,13 +739,13 @@ mod tests {
             servers: HashSet::from([0, 1, 2]),
         };
         let log = Vec::from([
+            Entry::config(0, config),
             Entry::command(1, 10),
             Entry::command(2, 4),
             Entry::command(3, 5),
             Entry::command(3, 6),
         ]);
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 4,
             log: log.clone(),
@@ -740,7 +758,7 @@ mod tests {
             reciever: persistent_state.id,
             term: 4,
             event: Event::Vote(request::Vote {
-                log_state: LogState { term: 3, length: 4 },
+                log_state: LogState { term: 3, length: 5 },
             }),
         };
 
@@ -782,13 +800,13 @@ mod tests {
             servers: HashSet::from([0, 1, 2]),
         };
         let log = Vec::from([
+            Entry::config(0, config),
             Entry::command(1, 10),
             Entry::command(2, 4),
             Entry::command(3, 5),
             Entry::command(3, 6),
         ]);
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 4,
             log: log.clone(),
@@ -801,7 +819,7 @@ mod tests {
             reciever: persistent_state.id,
             term: 4,
             event: Event::Vote(request::Vote {
-                log_state: LogState { term: 2, length: 5 },
+                log_state: LogState { term: 2, length: 6 },
             }),
         };
 
@@ -841,9 +859,12 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
-        let log = Vec::from([Entry::command(1, 10), Entry::command(3, 4)]);
+        let log = Vec::from([
+            Entry::config(0, config),
+            Entry::command(1, 10),
+            Entry::command(3, 4),
+        ]);
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 3,
             log: log.clone(),
@@ -858,7 +879,9 @@ mod tests {
             sender: 10,
             reciever: persistent_state.id,
             term: 0,
-            event: Event::Client(request::Client { data: 2 }),
+            event: Event::Client(request::Client {
+                data: Data::Command(2),
+            }),
         };
 
         let follower = Follower {};
@@ -884,7 +907,7 @@ mod tests {
             match request.event {
                 Event::ClientResponse(ClientResponse::Failed {
                     leader_id: Some(leader_id),
-                    data,
+                    data: Data::Command(data),
                 }) => {
                     assert_eq!(data, 2);
                     assert_eq!(leader_id, 0);
@@ -900,10 +923,13 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
-        let log = Vec::from([Entry::command(1, 10), Entry::command(3, 4)]);
+        let log = Vec::from([
+            Entry::config(0, config),
+            Entry::command(1, 10),
+            Entry::command(3, 4),
+        ]);
 
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 3,
             log: log.clone(),
@@ -918,7 +944,9 @@ mod tests {
             sender: 10,
             reciever: persistent_state.id,
             term: 0,
-            event: Event::Client(request::Client { data: 2 }),
+            event: Event::Client(request::Client {
+                data: Data::Command(2),
+            }),
         };
 
         let follower = Follower {};
@@ -944,7 +972,7 @@ mod tests {
             match request.event {
                 Event::ClientResponse(ClientResponse::Failed {
                     leader_id: None,
-                    data,
+                    data: Data::Command(data),
                 }) => {
                     assert_eq!(data, 2);
                 }

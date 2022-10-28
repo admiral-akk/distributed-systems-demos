@@ -3,9 +3,9 @@ use std::time::Duration;
 use async_std::sync::Arc;
 
 use async_std::task;
-use data::request::Request;
+use data::{persistent_state::Config, request::Request};
 use rand::Rng;
-use server::{client::Client, server::Server, switch::Switch};
+use server::{client::Client, cluster::Cluster, server::Server};
 use state::state::StateMachine;
 
 mod data;
@@ -40,7 +40,7 @@ impl DataGenerator<u32> for RandNum {
 }
 
 fn main() {
-    let switch: Arc<Switch<Request<u32, u32>>> = Switch::init();
+    let switch: Arc<Cluster<Request<u32, u32>>> = Cluster::init();
     let servers = (0..5)
         .map(|id| Server::new(id, switch.clone()))
         .map(|server| Arc::new(task::block_on(server)))
@@ -49,10 +49,13 @@ fn main() {
         .map(|id| Client::<u32, u32>::new(id, switch.clone()))
         .map(|client| Arc::new(task::block_on(client)))
         .collect::<Vec<_>>();
-    for server in servers {
-        Server::<u32, u32>::init::<Sum>(server);
-    }
 
+    let initial_config = Some(Config {
+        servers: [0, 1, 2, 3, 4].into(),
+    });
+    for server in servers {
+        Server::init::<Sum>(server, initial_config.clone());
+    }
     for client in clients {
         Client::init::<RandNum>(client);
     }

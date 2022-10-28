@@ -16,7 +16,7 @@ use crate::{
     state::state::{State, StateMachine},
 };
 
-use super::switch::{Id, Message, Switch};
+use super::cluster::{Cluster, Id, Message};
 
 pub struct Server<T: CommandType, Output: Send> {
     pub id: u32,
@@ -37,7 +37,7 @@ where
     Request<T, Output>: Message,
     PersistentState<T>: Default,
 {
-    pub async fn new(id: u32, switch: Arc<Switch<Request<T, Output>>>) -> Self {
+    pub async fn new(id: u32, switch: Arc<Cluster<Request<T, Output>>>) -> Self {
         let (output, server_sender, input) = switch.register(Id::new(id)).await;
         Self {
             input,
@@ -47,9 +47,9 @@ where
         }
     }
 
-    pub fn init<SM: StateMachine<T, Output>>(server: Arc<Self>) {
+    pub fn init<SM: StateMachine<T, Output>>(server: Arc<Self>, initial_config: Option<Config>) {
         task::spawn(Server::random_shutdown(server.clone()));
-        task::spawn(Server::request_loop::<SM>(server.clone()));
+        task::spawn(Server::request_loop::<SM>(server.clone(), initial_config));
         task::spawn(Server::tick_loop(server.clone()));
     }
 
@@ -84,13 +84,11 @@ where
         }
     }
 
-    async fn request_loop<SM: StateMachine<T, Output>>(server: Arc<Self>) {
-        let mut state: State<T, SM> = State::new(
-            server.id,
-            Config {
-                servers: HashSet::from([0, 1, 2, 3, 4]),
-            },
-        );
+    async fn request_loop<SM: StateMachine<T, Output>>(
+        server: Arc<Self>,
+        initial_config: Option<Config>,
+    ) {
+        let mut state: State<T, SM> = State::new(server.id, initial_config);
         let mut responses;
         loop {
             let request = server.input.recv().await;

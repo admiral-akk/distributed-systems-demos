@@ -1,10 +1,10 @@
 use std::fmt::Debug;
 
-use crate::server::switch::{Id, Message};
+use crate::server::cluster::{Id, Message};
 
 use super::{
     data_type::CommandType,
-    persistent_state::{Entry, LogState},
+    persistent_state::{Config, Entry, LogState},
 };
 
 pub struct Request<T: CommandType, Output> {
@@ -21,6 +21,11 @@ impl<T: CommandType + Send, Output: Debug + Send + 'static> Message for Request<
     }
 }
 
+#[derive(Clone, PartialEq)]
+pub enum Data<T> {
+    Command(T),
+    Config(Config),
+}
 pub enum Event<T: CommandType, Output> {
     Insert(Insert<T>),
     InsertResponse(InsertResponse),
@@ -33,12 +38,17 @@ pub enum Event<T: CommandType, Output> {
 }
 pub struct Crash;
 pub struct Client<T: CommandType> {
-    pub data: T,
+    pub data: Data<T>,
 }
 
 pub enum ClientResponse<T: CommandType, Output> {
-    Failed { leader_id: Option<u32>, data: T },
-    Success { data: Output },
+    Failed {
+        leader_id: Option<u32>,
+        data: Data<T>,
+    },
+    Success {
+        data: Output,
+    },
 }
 
 pub struct Insert<T: CommandType> {

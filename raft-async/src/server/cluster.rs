@@ -7,6 +7,16 @@ use async_std::{
 };
 use rand::Rng;
 
+use crate::{
+    data::{
+        data_type::{CommandType, OutputType},
+        request::Request,
+    },
+    state::state::StateMachine,
+};
+
+use super::server::Server;
+
 #[derive(Hash, PartialEq, Eq)]
 pub struct Id(u32); // todo: change id into an enum so you can seperate client/server
 
@@ -21,13 +31,13 @@ pub trait Message: Send + 'static {
 }
 
 // Responsible for routing requests between servers.
-pub struct Switch<T> {
+pub struct Cluster<T> {
     pub sender: Sender<T>,
     pub reciever: Receiver<T>,
     pub senders: Mutex<HashMap<Id, Sender<T>>>,
 }
 
-impl<T: Message> Switch<T> {
+impl<T: Message> Cluster<T> {
     pub fn init() -> Arc<Self> {
         let (sender, reciever) = channel::unbounded();
 
@@ -36,7 +46,7 @@ impl<T: Message> Switch<T> {
             reciever,
             senders: Default::default(),
         });
-        task::spawn(Switch::request_loop(switch.clone()));
+        task::spawn(Cluster::request_loop(switch.clone()));
         switch
     }
 

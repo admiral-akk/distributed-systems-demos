@@ -117,9 +117,10 @@ impl EventHandler for Leader {
                     .match_index
                     .iter()
                     .filter(|(_, v)| **v >= next_index)
-                    .count();
+                    .map(|(id, _)| *id)
+                    .collect();
 
-                if matching_servers + 1 > persistent_state.quorum() {
+                if persistent_state.has_quorum(&matching_servers) {
                     if volitile_state.try_update_commit_index(
                         state_machine,
                         persistent_state,
@@ -144,7 +145,7 @@ mod tests {
     use std::collections::HashSet;
 
     use crate::data::persistent_state::{Config, Entry};
-    use crate::data::request::{self, Event};
+    use crate::data::request::{self, Data, Event};
     use crate::Sum;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
@@ -155,10 +156,13 @@ mod tests {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 3,
-            log: Vec::from([Entry::command(1, 10), Entry::command(3, 4)]),
+            log: Vec::from([
+                Entry::config(0, config),
+                Entry::command(1, 10),
+                Entry::command(3, 4),
+            ]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState {
@@ -193,7 +197,7 @@ mod tests {
             assert!(request.term == persistent_state.current_term);
             match request.event {
                 Event::Insert(event) => {
-                    assert_eq!(event.prev_log_state.length, 2);
+                    assert_eq!(event.prev_log_state.length, 3);
                     assert_eq!(event.prev_log_state.term, 3);
                     assert_eq!(event.leader_commit, 1);
                     assert!(event.entries.is_empty());
@@ -211,10 +215,13 @@ mod tests {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 3,
-            log: Vec::from([Entry::command(1, 10), Entry::command(3, 4)]),
+            log: Vec::from([
+                Entry::config(0, config),
+                Entry::command(1, 10),
+                Entry::command(3, 4),
+            ]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState {
@@ -228,7 +235,7 @@ mod tests {
             event: Event::Tick(request::Tick),
         };
         let leader = Leader {
-            next_index: HashMap::from([(0, 2), (2, 2), (3, 2), (4, 2)]),
+            next_index: HashMap::from([(0, 3), (2, 3), (3, 3), (4, 3)]),
             match_index: HashMap::from([(0, 0), (2, 0), (3, 0), (4, 0)]),
         };
 
@@ -252,7 +259,7 @@ mod tests {
             assert!(request.term == persistent_state.current_term);
             match request.event {
                 Event::Insert(event) => {
-                    assert_eq!(event.prev_log_state.length, 2);
+                    assert_eq!(event.prev_log_state.length, 3);
                     assert_eq!(event.prev_log_state.term, 3);
                     assert_eq!(event.leader_commit, 1);
                     assert!(event.entries.is_empty());
@@ -270,10 +277,13 @@ mod tests {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 3,
-            log: Vec::from([Entry::command(1, 10), Entry::command(3, 4)]),
+            log: Vec::from([
+                Entry::config(0, config),
+                Entry::command(1, 10),
+                Entry::command(3, 4),
+            ]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState {
@@ -311,15 +321,18 @@ mod tests {
     }
 
     #[test]
-    fn test_append_response_suceeds_up_to_date() {
+    fn test_append_response_succeeds_up_to_date() {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
-            current_term: 3,
-            log: Vec::from([Entry::command(1, 10), Entry::command(3, 4)]),
+            current_term: 4,
+            log: Vec::from([
+                Entry::config(0, config),
+                Entry::command(1, 10),
+                Entry::command(3, 4),
+            ]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState {
@@ -329,12 +342,12 @@ mod tests {
         let request: Request<u32, u32> = Request {
             sender: 0,
             reciever: persistent_state.id,
-            term: 3,
+            term: 4,
             event: Event::InsertResponse(request::InsertResponse { success: true }),
         };
 
         let leader = Leader {
-            next_index: HashMap::from([(0, 2), (2, 2), (3, 2), (4, 1)]),
+            next_index: HashMap::from([(0, 3), (2, 2), (3, 2), (4, 1)]),
             match_index: HashMap::from([(0, 0), (2, 0), (3, 0), (4, 0)]),
         };
 
@@ -348,8 +361,8 @@ mod tests {
         );
 
         if let RaftState::Leader(leader) = next {
-            assert_eq!(leader.next_index[&0], 2);
-            assert_eq!(leader.match_index[&0], 2);
+            assert_eq!(leader.next_index[&0], 3);
+            assert_eq!(leader.match_index[&0], 3);
         } else {
             panic!("Didn't transition to leader!");
         }
@@ -362,10 +375,13 @@ mod tests {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 3,
-            log: Vec::from([Entry::command(1, 10), Entry::command(3, 4)]),
+            log: Vec::from([
+                Entry::config(0, config),
+                Entry::command(1, 10),
+                Entry::command(3, 4),
+            ]),
             ..Default::default()
         };
         let mut volitile_state = VolitileState {
@@ -407,9 +423,12 @@ mod tests {
         let config = Config {
             servers: HashSet::from([0, 1, 2, 3, 4]),
         };
-        let log = Vec::from([Entry::command(1, 10), Entry::command(3, 4)]);
+        let log = Vec::from([
+            Entry::config(0, config),
+            Entry::command(1, 10),
+            Entry::command(3, 4),
+        ]);
         let mut persistent_state: PersistentState<u32> = PersistentState {
-            config,
             id: 1,
             current_term: 3,
             log: log.clone(),
@@ -423,7 +442,9 @@ mod tests {
             sender: 0,
             reciever: persistent_state.id,
             term: 0,
-            event: Event::Client(request::Client { data: 2 }),
+            event: Event::Client(request::Client {
+                data: Data::Command(2),
+            }),
         };
 
         let leader = Leader {
@@ -446,8 +467,8 @@ mod tests {
         }
         assert!(requests.is_empty());
         assert_eq!(volitile_state.get_commit_index(), 1);
-        assert_eq!(persistent_state.log.len(), 3);
-        assert!(log.iter().eq(persistent_state.log[0..2].iter()));
-        assert!(Entry::command(3, 2).eq(&persistent_state.log[2]));
+        assert_eq!(persistent_state.log.len(), 4);
+        assert!(log.iter().eq(persistent_state.log[0..3].iter()));
+        assert!(Entry::command(3, 2).eq(&persistent_state.log[3]));
     }
 }

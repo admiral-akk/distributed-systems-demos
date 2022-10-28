@@ -14,7 +14,7 @@ use async_std::{
 };
 use rand::Rng;
 
-use super::switch::{Id, Message, Switch};
+use super::cluster::{Cluster, Id, Message};
 
 pub struct Client<T: CommandType, Output>
 where
@@ -33,7 +33,7 @@ impl<T: CommandType, Output: Send> Client<T, Output>
 where
     Request<T, Output>: Message,
 {
-    pub async fn new(id: u32, switch: Arc<Switch<Request<T, Output>>>) -> Self {
+    pub async fn new(id: u32, switch: Arc<Cluster<Request<T, Output>>>) -> Self {
         let (output, server_sender, input) = switch.register(Id::new(id)).await;
         Self {
             id,
@@ -58,7 +58,7 @@ where
                 reciever: *client.leader_id.lock().await,
                 term: 0,
                 event: Event::Client(request::Client {
-                    data: data_gen.gen(),
+                    data: request::Data::Command(data_gen.gen()),
                 }),
             };
             client.output.send(request).await;
