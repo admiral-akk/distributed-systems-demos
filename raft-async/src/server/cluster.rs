@@ -10,6 +10,7 @@ use rand::Rng;
 use crate::{
     data::{
         data_type::{CommandType, OutputType},
+        persistent_state::Config,
         request::Request,
     },
     state::state::StateMachine,
@@ -31,22 +32,27 @@ pub trait Message: Send + 'static {
 }
 
 // Responsible for routing requests between servers.
-pub struct Cluster<T> {
+pub struct RaftCluster<T> {
     pub sender: Sender<T>,
     pub reciever: Receiver<T>,
     pub senders: Mutex<HashMap<Id, Sender<T>>>,
+    pub initial_config: Config,
 }
 
-impl<T: Message> Cluster<T> {
-    pub fn init() -> Arc<Self> {
+impl<In: CommandType, Out: OutputType> RaftCluster<Request<In, Out>> {
+    pub fn init<SM: StateMachine<In, Out>>(initial_config: Config) -> Arc<Self> {
         let (sender, reciever) = channel::unbounded();
 
         let switch = Arc::new(Self {
             sender,
             reciever,
             senders: Default::default(),
+            initial_config: initial_config.clone(),
         });
-        task::spawn(Cluster::request_loop(switch.clone()));
+        for server in initial_config.servers {
+            Server::init::<SM>(server, switch.clone());
+        }
+        task::spawn(RaftCluster::request_loop(switch.clone()));
         switch
     }
 
@@ -65,7 +71,14 @@ impl<T: Message> Cluster<T> {
             }
         }
     }
-    pub async fn register(&self, id: Id) -> (Sender<T>, Sender<T>, Receiver<T>) {
+    pub async fn register(
+        &self,
+        id: Id,
+    ) -> (
+        Sender<Request<In, Out>>,
+        Sender<Request<In, Out>>,
+        Receiver<Request<In, Out>>,
+    ) {
         let (server_sender, server_reciever) = channel::unbounded();
         self.senders.lock().await.insert(id, server_sender.clone());
         (self.sender.clone(), server_sender, server_reciever)

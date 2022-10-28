@@ -5,7 +5,7 @@ use async_std::sync::Arc;
 use async_std::task;
 use data::{persistent_state::Config, request::Request};
 use rand::Rng;
-use server::{client::Client, cluster::Cluster, server::Server};
+use server::{client::Client, cluster::RaftCluster, server::Server};
 use state::state::StateMachine;
 
 mod data;
@@ -40,22 +40,15 @@ impl DataGenerator<u32> for RandNum {
 }
 
 fn main() {
-    let switch: Arc<Cluster<Request<u32, u32>>> = Cluster::init();
-    let servers = (0..5)
-        .map(|id| Server::new(id, switch.clone()))
-        .map(|server| Arc::new(task::block_on(server)))
-        .collect::<Vec<_>>();
+    let initial_config = Config {
+        servers: [0, 1, 2, 3, 4].into(),
+    };
+    let switch: Arc<RaftCluster<Request<u32, u32>>> = RaftCluster::init::<Sum>(initial_config);
     let clients = (10..12)
         .map(|id| Client::<u32, u32>::new(id, switch.clone()))
         .map(|client| Arc::new(task::block_on(client)))
         .collect::<Vec<_>>();
 
-    let initial_config = Some(Config {
-        servers: [0, 1, 2, 3, 4].into(),
-    });
-    for server in servers {
-        Server::init::<Sum>(server, initial_config.clone());
-    }
     for client in clients {
         Client::init::<RandNum>(client);
     }

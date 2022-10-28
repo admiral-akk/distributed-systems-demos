@@ -22,9 +22,15 @@ impl<T: CommandType + Send, Output: Debug + Send + 'static> Message for Request<
 }
 
 #[derive(Clone, PartialEq)]
+pub enum ActiveConfig {
+    Stable(Config),
+    Transition { prev: Config, new: Config },
+}
+
+#[derive(Clone, PartialEq)]
 pub enum Data<T> {
     Command(T),
-    Config(Config),
+    Config(ActiveConfig),
 }
 pub enum Event<T: CommandType, Output> {
     Insert(Insert<T>),

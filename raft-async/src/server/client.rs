@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use crate::{
     data::{
-        data_type::CommandType,
+        data_type::{CommandType, OutputType},
         request::{self, ClientResponse, Event, Request},
     },
     DataGenerator,
@@ -14,7 +14,7 @@ use async_std::{
 };
 use rand::Rng;
 
-use super::cluster::{Cluster, Id, Message};
+use super::cluster::{Id, Message, RaftCluster};
 
 pub struct Client<T: CommandType, Output>
 where
@@ -29,11 +29,11 @@ where
 
 const WAIT: Duration = Duration::from_millis(500);
 
-impl<T: CommandType, Output: Send> Client<T, Output>
+impl<T: CommandType, Output: OutputType> Client<T, Output>
 where
     Request<T, Output>: Message,
 {
-    pub async fn new(id: u32, switch: Arc<Cluster<Request<T, Output>>>) -> Self {
+    pub async fn new(id: u32, switch: Arc<RaftCluster<Request<T, Output>>>) -> Self {
         let (output, server_sender, input) = switch.register(Id::new(id)).await;
         Self {
             id,

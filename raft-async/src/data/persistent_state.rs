@@ -2,12 +2,18 @@ use std::collections::HashSet;
 
 use super::{
     data_type::CommandType,
-    request::{Data, Event, Insert, Vote},
+    request::{ActiveConfig, Data, Event, Insert, Vote},
 };
 
 #[derive(Default, Clone, PartialEq)]
 pub struct Config {
     pub servers: HashSet<u32>,
+}
+
+impl Config {
+    pub fn has_quorum(&self, votes: &HashSet<u32>) -> bool {
+        self.servers.intersection(votes).count() >= self.servers.len() / 2 + 1
+    }
 }
 
 #[derive(Clone, PartialEq)]
@@ -27,7 +33,7 @@ impl<T: Clone> Entry<T> {
     pub fn config(term: u32, config: Config) -> Self {
         Entry {
             term,
-            data: Data::Config(config),
+            data: Data::Config(ActiveConfig::Stable(config)),
         }
     }
 }
@@ -46,37 +52,41 @@ pub struct LogState {
     pub length: usize,
 }
 
-pub enum ActiveConfig {
-    None,
-    Stable(Config),
-    Transition { prev: Config, latest: Config },
+struct LatestConfig {
+    pub config: ActiveConfig,
+    pub committed: bool,
+}
+
+impl LatestConfig {
+    pub fn servers(&self) -> HashSet<u32> {
+        match &self.config {
+            ActiveConfig::Stable(config) => config.servers.clone(),
+            ActiveConfig::Transition { prev, new } => {
+                prev.servers.union(&new.servers).map(|id| *id).collect()
+            }
+        }
+    }
 }
 
 impl<T: CommandType> PersistentState<T> {
-    fn latest_configs(&self) -> ActiveConfig {
-        let mut configs = self.log.iter().rev().filter(|entry| match entry.data {
-            Data::Command(_) => false,
-            Data::Config(_) => true,
-        });
-        match configs.next() {
-            Some(Entry {
-                data: Data::Config(latest),
-                ..
-            }) => {
-                let latest = latest.clone();
-                match configs.next() {
-                    Some(Entry {
-                        data: Data::Config(prev),
-                        ..
-                    }) => {
-                        let prev = prev.clone();
-                        ActiveConfig::Transition { prev, latest }
-                    }
-                    _ => ActiveConfig::Stable(latest.clone()),
-                }
-            }
-            _ => ActiveConfig::None,
-        }
+    fn latest_config(&self, commit_index: usize) -> LatestConfig {
+        self.log
+            .iter()
+            .enumerate()
+            .rev()
+            .filter(|(_, entry)| match entry.data {
+                Data::Command(_) => false,
+                Data::Config(_) => true,
+            })
+            .map(|(i, entry)| match &entry.data {
+                Data::Config(active_config) => LatestConfig {
+                    config: active_config.clone(),
+                    committed: i < commit_index,
+                },
+                _ => panic!(),
+            })
+            .next()
+            .unwrap()
     }
 
     pub fn push(&mut self, data: Data<T>) {
@@ -164,38 +174,21 @@ impl<T: CommandType> PersistentState<T> {
         }
     }
 
-    pub fn has_quorum(&self, matching: &HashSet<u32>) -> bool {
-        let latest = self.latest_configs();
-        match latest {
-            ActiveConfig::None => false,
-            ActiveConfig::Stable(config) => {
-                let valid_votes = config.servers.intersection(&matching).count();
-                valid_votes >= config.servers.len() / 2 + 1
+    pub fn has_quorum(&self, matching: &HashSet<u32>, commit_index: usize) -> bool {
+        let latest = self.latest_config(commit_index);
+        match latest.config {
+            ActiveConfig::Stable(config) => config.has_quorum(matching),
+            ActiveConfig::Transition { prev, new } => {
+                prev.has_quorum(matching) && new.has_quorum(matching)
             }
-            ActiveConfig::Transition { prev, latest } => false,
         }
     }
 
     pub fn other_servers(&self) -> Vec<u32> {
-        let latest = self
-            .log
-            .iter()
-            .rev()
-            .filter(|e| match e.data {
-                Data::Config(_) => true,
-                _ => false,
-            })
-            .next();
-        match latest {
-            Some(Entry {
-                data: Data::Config(Config { servers }),
-                ..
-            }) => servers
-                .iter()
-                .filter(|id| !self.id.eq(id))
-                .map(|id| *id)
-                .collect(),
-            _ => Vec::new(),
-        }
+        self.latest_config(0)
+            .servers()
+            .into_iter()
+            .filter(|server| !self.id.eq(server))
+            .collect()
     }
 }

@@ -120,7 +120,7 @@ impl EventHandler for Leader {
                     .map(|(id, _)| *id)
                     .collect();
 
-                if persistent_state.has_quorum(&matching_servers) {
+                if persistent_state.has_quorum(&matching_servers, volitile_state.commit_index) {
                     if volitile_state.try_update_commit_index(
                         state_machine,
                         persistent_state,

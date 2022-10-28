@@ -16,7 +16,7 @@ use crate::{
     state::state::{State, StateMachine},
 };
 
-use super::cluster::{Cluster, Id, Message};
+use super::cluster::{Id, Message, RaftCluster};
 
 pub struct Server<T: CommandType, Output: Send> {
     pub id: u32,
@@ -37,19 +37,22 @@ where
     Request<T, Output>: Message,
     PersistentState<T>: Default,
 {
-    pub async fn new(id: u32, switch: Arc<Cluster<Request<T, Output>>>) -> Self {
+    pub async fn init<SM: StateMachine<T, Output>>(
+        id: u32,
+        switch: Arc<RaftCluster<Request<T, Output>>>,
+    ) {
         let (output, server_sender, input) = switch.register(Id::new(id)).await;
-        Self {
+        let server = Arc::new(Self {
             input,
             output,
             id,
             server_sender,
-        }
-    }
-
-    pub fn init<SM: StateMachine<T, Output>>(server: Arc<Self>, initial_config: Option<Config>) {
+        });
         task::spawn(Server::random_shutdown(server.clone()));
-        task::spawn(Server::request_loop::<SM>(server.clone(), initial_config));
+        task::spawn(Server::request_loop::<SM>(
+            server.clone(),
+            switch.initial_config.clone(),
+        ));
         task::spawn(Server::tick_loop(server.clone()));
     }
 
@@ -84,10 +87,7 @@ where
         }
     }
 
-    async fn request_loop<SM: StateMachine<T, Output>>(
-        server: Arc<Self>,
-        initial_config: Option<Config>,
-    ) {
+    async fn request_loop<SM: StateMachine<T, Output>>(server: Arc<Self>, initial_config: Config) {
         let mut state: State<T, SM> = State::new(server.id, initial_config);
         let mut responses;
         loop {
