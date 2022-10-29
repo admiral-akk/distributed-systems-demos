@@ -81,7 +81,7 @@ impl<T: CommandType, SM: Default> State<T, SM> {
 pub mod test_util {
     use crate::{
         data::{
-            persistent_state::{test_util::PERSISTENT_STATE, PersistentState},
+            persistent_state::{test_util::PERSISTENT_STATE, Entry, PersistentState},
             request::Request,
             volitile_state::{test_util::VOLITILE_STATE, VolitileState},
         },
@@ -95,7 +95,7 @@ pub mod test_util {
     impl State<u32, Sum> {
         pub fn create_state(raft_state: RaftState) -> State<u32, Sum> {
             State {
-                state_machine: Sum::default(),
+                state_machine: Sum { total: 10 },
                 persistent_state: PERSISTENT_STATE(),
                 raft_state,
                 volitile_state: VOLITILE_STATE,
@@ -112,8 +112,22 @@ pub mod test_util {
             self
         }
 
+        pub fn set_log(mut self, log: Vec<Entry<u32>>) -> Self {
+            self.persistent_state.log = log;
+            self
+        }
+
+        pub fn set_commit(mut self, commit_index: usize) -> Self {
+            self.volitile_state.commit_index = commit_index;
+            self
+        }
         pub fn set_vs(mut self, volitile_state: VolitileState) -> Self {
             self.volitile_state = volitile_state;
+            self
+        }
+
+        pub fn set_sum(mut self, total: u32) -> Self {
+            self.state_machine.total = total;
             self
         }
     }
@@ -156,8 +170,22 @@ pub mod test_util {
             self
         }
 
+        pub fn set_log(mut self, log: Vec<Entry<u32>>) -> Self {
+            self.expected_state = self.expected_state.set_log(log);
+            self
+        }
         pub fn set_vs(mut self, volitile_state: VolitileState) -> Self {
             self.expected_state = self.expected_state.set_vs(volitile_state);
+            self
+        }
+
+        pub fn set_sum(mut self, total: u32) -> Self {
+            self.expected_state = self.expected_state.set_sum(total);
+            self
+        }
+
+        pub fn set_commit(mut self, commit_index: usize) -> Self {
+            self.expected_state = self.expected_state.set_commit(commit_index);
             self
         }
 
@@ -166,8 +194,8 @@ pub mod test_util {
             (responses, self.state) = self.state.clone().handle_request(self.request.clone());
 
             responses.sort_by(|r_1, r_2| r_1.reciever.cmp(&r_2.reciever));
-            assert_eq!(self.state, self.expected_state,);
-            assert_eq!(responses, self.expected_responses,);
+            assert_eq!(self.state, self.expected_state);
+            assert_eq!(responses, self.expected_responses);
         }
     }
 }

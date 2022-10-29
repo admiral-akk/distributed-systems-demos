@@ -116,11 +116,12 @@ mod tests {
     use std::collections::HashSet;
 
     use crate::data::persistent_state::test_util::{
-        LOG_LEADER, MISMATCH_LOG, PERSISTENT_STATE, PERSISTENT_STATE_LOG,
+        LOG, LOG_LEADER, MISMATCH_LOG, PERSISTENT_STATE,
     };
     use crate::data::persistent_state::{Config, Entry, LogState};
     use crate::data::request::test_util::{
-        INSERT, INSERT_FAILED_RESPONSE, INSERT_SUCCESS_RESPONSE, REQUEST_VOTES, TICK,
+        INSERT, INSERT_FAILED_RESPONSE, INSERT_SUCCESS_RESPONSE, REQUEST_VOTES, TICK, VOTE,
+        VOTE_NEW_SHORT, VOTE_NO_RESPONSE, VOTE_OLD_EQUAL, VOTE_OLD_LONG, VOTE_YES_RESPONSE,
     };
     use crate::data::request::{self, Data};
     use crate::data::volitile_state::test_util::{VOLITILE_STATE, VOLITILE_STATE_TIMEOUT};
@@ -129,7 +130,6 @@ mod tests {
     use crate::state::concrete::follower::Follower;
     use crate::state::state::test_util::TestCase;
     use crate::state::state::State;
-    use crate::test_util::STATE_MACHINE;
     use crate::Sum;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
@@ -157,7 +157,7 @@ mod tests {
     #[test]
     fn test_append_old_leader() {
         let state = State::create_state(FOLLOWER);
-        let mut test_case = TestCase::new(state, INSERT(1).set_term(2))
+        let mut test_case = TestCase::new(state, INSERT(2).set_term(2))
             .responses(&[INSERT_FAILED_RESPONSE.reverse_sender()]);
         test_case.run();
     }
@@ -165,7 +165,7 @@ mod tests {
     #[test]
     fn test_append_log_too_short() {
         let state = State::create_state(FOLLOWER);
-        let mut test_case = TestCase::new(state, INSERT(10))
+        let mut test_case = TestCase::new(state, INSERT(4))
             .responses(&[INSERT_FAILED_RESPONSE.reverse_sender()])
             .set_voted(0);
         test_case.run();
@@ -173,433 +173,79 @@ mod tests {
 
     #[test]
     fn test_append_log_last_term_mismatch() {
-        let (mut state, mut volitile_state, mut persistent_state, mut state_machine, mut request) = (
-            FOLLOWER,
-            VOLITILE_STATE,
-            PERSISTENT_STATE_LOG(MISMATCH_LOG()),
-            STATE_MACHINE(),
-            INSERT(3),
-        );
-
-        let (requests, state) = state.handle_request(
-            request,
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-        );
-        if let RaftState::Follower(_) = state {
-        } else {
-            panic!("Didn't remain a follower!");
-        }
-        assert_eq!(
-            persistent_state,
-            PERSISTENT_STATE_LOG(MISMATCH_LOG()).set_voted(0)
-        );
-        assert_eq!(volitile_state, VOLITILE_STATE);
-        assert_eq!(requests, [INSERT_FAILED_RESPONSE.reverse_sender()]);
+        let state = State::create_state(FOLLOWER).set_log(MISMATCH_LOG());
+        let mut test_case = TestCase::new(state, INSERT(3))
+            .responses(&[INSERT_FAILED_RESPONSE.reverse_sender()])
+            .set_voted(0);
+        test_case.run();
     }
 
     #[test]
     fn test_append_log_basic() {
-        let (mut state, mut volitile_state, mut persistent_state, mut state_machine, mut request) = (
-            FOLLOWER,
-            VOLITILE_STATE,
-            PERSISTENT_STATE(),
-            STATE_MACHINE(),
-            INSERT(3),
-        );
-
-        let (requests, state) = state.handle_request(
-            request,
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-        );
-        if let RaftState::Follower(_) = state {
-        } else {
-            panic!("Didn't remain a follower!");
-        }
-        assert_eq!(
-            persistent_state,
-            PERSISTENT_STATE_LOG(LOG_LEADER()).set_voted(0)
-        );
-        assert_eq!(volitile_state, VOLITILE_STATE.set_commit(4));
-        assert_eq!(requests, [INSERT_SUCCESS_RESPONSE.reverse_sender()]);
+        let state = State::create_state(FOLLOWER);
+        let mut test_case = TestCase::new(state, INSERT(3))
+            .responses(&[INSERT_SUCCESS_RESPONSE.reverse_sender()])
+            .set_log(LOG_LEADER()[0..4].into())
+            .set_voted(0)
+            .set_commit(4)
+            .set_sum(19);
+        test_case.run();
     }
 
     #[test]
     fn test_append_log_overwrite() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2]),
-        };
-        let log = Vec::from([
-            Entry::config(0, config),
-            Entry::command(1, 10),
-            Entry::command(2, 4),
-            Entry::command(3, 5),
-            Entry::command(3, 6),
-        ]);
-
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 4,
-            log: log.clone(),
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState::default();
-        let follower = Follower::default();
-        let entries = Vec::from([Entry::command(4, 5)]);
-        let original_request: Request<u32, u32> = Request {
-            sender: 0,
-            reciever: persistent_state.id,
-            term: 4,
-            event: Event::Insert(request::Insert {
-                prev_log_state: LogState { term: 2, length: 3 },
-                entries: entries.clone(),
-                leader_commit: 12,
-            }),
-        };
-
-        let mut state_machine = Sum::default();
-
-        let (requests, next) = follower.handle_request(
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-            original_request,
-        );
-
-        if let RaftState::Follower(_) = next {
-        } else {
-            panic!("Didn't transition to follower!");
-        }
-        assert!(requests.len() == 1);
-        assert!(persistent_state.current_term == 4);
-        assert!(persistent_state.voted_for == Some(0));
-        for request in requests {
-            assert!(request.sender == persistent_state.id);
-            assert!(request.reciever == 0);
-            assert!(request.term == persistent_state.current_term);
-            match request.event {
-                Event::InsertResponse(event) => {
-                    assert!(event.success);
-                }
-                _ => {
-                    panic!("Non-append response!");
-                }
-            }
-        }
-
-        assert!(log[0..3].iter().eq(persistent_state.log[0..3].iter()));
-        assert!(entries[0..1].iter().eq(persistent_state.log[3..4].iter()));
-        assert!(persistent_state.log.len() == 4);
-        assert!(volitile_state.get_commit_index() == 4);
+        let state = State::create_state(FOLLOWER).set_log(MISMATCH_LOG());
+        let mut test_case = TestCase::new(state, INSERT(2))
+            .responses(&[INSERT_SUCCESS_RESPONSE.reverse_sender()])
+            .set_log(LOG())
+            .set_voted(0)
+            .set_commit(3)
+            .set_sum(14);
+        test_case.run();
     }
 
     #[test]
     fn test_vote_old_term() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2]),
-        };
-        let log = Vec::from([
-            Entry::config(0, config),
-            Entry::command(1, 10),
-            Entry::command(2, 4),
-            Entry::command(3, 5),
-            Entry::command(3, 6),
-        ]);
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 4,
-            log: log.clone(),
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState::default();
-        let follower = Follower::default();
-        let original_request: Request<u32, u32> = Request {
-            sender: 2,
-            reciever: persistent_state.id,
-            term: 3,
-            event: Event::Vote(request::Vote {
-                log_state: LogState { term: 3, length: 5 },
-            }),
-        };
-
-        let mut state_machine = Sum::default();
-
-        let (requests, next) = follower.handle_request(
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-            original_request,
-        );
-
-        if let RaftState::Follower(_) = next {
-        } else {
-            panic!("Didn't transition to follower!");
-        }
-        assert!(requests.len() == 1);
-        assert!(persistent_state.current_term == 4);
-        assert!(persistent_state.voted_for == None);
-        for request in requests {
-            assert!(request.sender == persistent_state.id);
-            assert!(request.reciever == 2);
-            assert!(request.term == persistent_state.current_term);
-            match request.event {
-                Event::VoteResponse(event) => {
-                    assert!(!event.success);
-                }
-                _ => {
-                    panic!("Non-vote response!");
-                }
-            }
-        }
-        assert!(persistent_state.log.iter().eq(log.iter()));
+        let state = State::create_state(FOLLOWER);
+        let mut test_case =
+            TestCase::new(state, VOTE.set_term(2)).responses(&[VOTE_NO_RESPONSE.reverse_sender()]);
+        test_case.run();
     }
 
     #[test]
     fn test_vote_shorter_log_larger_last_term() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2]),
-        };
-        let log = Vec::from([
-            Entry::config(0, config),
-            Entry::command(1, 10),
-            Entry::command(2, 4),
-            Entry::command(3, 5),
-            Entry::command(3, 6),
-        ]);
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 4,
-            log: log.clone(),
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState::default();
-        let follower = Follower::default();
-        let original_request: Request<u32, u32> = Request {
-            sender: 2,
-            reciever: persistent_state.id,
-            term: 4,
-            event: Event::Vote(request::Vote {
-                log_state: LogState { term: 4, length: 3 },
-            }),
-        };
-
-        let mut state_machine = Sum::default();
-
-        let (requests, next) = follower.handle_request(
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-            original_request,
-        );
-
-        if let RaftState::Follower(_) = next {
-        } else {
-            panic!("Didn't transition to follower!");
-        }
-        assert!(requests.len() == 1);
-        assert!(persistent_state.current_term == 4);
-        assert!(persistent_state.voted_for == None);
-        for request in requests {
-            assert!(request.sender == persistent_state.id);
-            assert!(request.reciever == 2);
-            assert!(request.term == persistent_state.current_term);
-            match request.event {
-                Event::VoteResponse(event) => {
-                    assert!(!event.success);
-                }
-                _ => {
-                    panic!("Non-vote response!");
-                }
-            }
-        }
-        assert!(persistent_state.log.iter().eq(log.iter()));
+        let state = State::create_state(FOLLOWER);
+        let mut test_case =
+            TestCase::new(state, VOTE_NEW_SHORT).responses(&[VOTE_NO_RESPONSE.reverse_sender()]);
+        test_case.run();
     }
 
     #[test]
     fn test_vote_same_log_length_older_term() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2]),
-        };
-        let log = Vec::from([
-            Entry::config(0, config),
-            Entry::command(1, 10),
-            Entry::command(2, 4),
-            Entry::command(3, 5),
-            Entry::command(3, 6),
-        ]);
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 4,
-            log: log.clone(),
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState::default();
-        let follower = Follower::default();
-        let original_request: Request<u32, u32> = Request {
-            sender: 2,
-            reciever: persistent_state.id,
-            term: 4,
-            event: Event::Vote(request::Vote {
-                log_state: LogState { term: 2, length: 4 },
-            }),
-        };
-
-        let mut state_machine = Sum::default();
-
-        let (requests, next) = follower.handle_request(
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-            original_request,
-        );
-
-        if let RaftState::Follower(_) = next {
-        } else {
-            panic!("Didn't transition to follower!");
-        }
-        assert!(requests.len() == 1);
-        assert!(persistent_state.current_term == 4);
-        assert!(persistent_state.voted_for == None);
-        for request in requests {
-            assert!(request.sender == persistent_state.id);
-            assert!(request.reciever == 2);
-            assert!(request.term == persistent_state.current_term);
-            match request.event {
-                Event::VoteResponse(event) => {
-                    assert!(!event.success);
-                }
-                _ => {
-                    panic!("Non-vote response!");
-                }
-            }
-        }
-        assert!(persistent_state.log.iter().eq(log.iter()));
+        let state = State::create_state(FOLLOWER);
+        let mut test_case =
+            TestCase::new(state, VOTE_OLD_EQUAL).responses(&[VOTE_NO_RESPONSE.reverse_sender()]);
+        test_case.run();
     }
 
     #[test]
     fn test_vote_same_log_length_same_term() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2]),
-        };
-        let log = Vec::from([
-            Entry::config(0, config),
-            Entry::command(1, 10),
-            Entry::command(2, 4),
-            Entry::command(3, 5),
-            Entry::command(3, 6),
-        ]);
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 4,
-            log: log.clone(),
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState::default();
-        let follower = Follower::default();
-        let original_request: Request<u32, u32> = Request {
-            sender: 2,
-            reciever: persistent_state.id,
-            term: 4,
-            event: Event::Vote(request::Vote {
-                log_state: LogState { term: 3, length: 5 },
-            }),
-        };
-
-        let mut state_machine = Sum::default();
-
-        let (requests, next) = follower.handle_request(
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-            original_request,
-        );
-
-        if let RaftState::Follower(_) = next {
-        } else {
-            panic!("Didn't transition to follower!");
-        }
-        assert!(requests.len() == 1);
-        assert!(persistent_state.current_term == 4);
-        assert!(persistent_state.voted_for == Some(2));
-        for request in requests {
-            assert!(request.sender == persistent_state.id);
-            assert!(request.reciever == 2);
-            assert!(request.term == persistent_state.current_term);
-            match request.event {
-                Event::VoteResponse(event) => {
-                    assert!(event.success);
-                }
-                _ => {
-                    panic!("Non-vote response!");
-                }
-            }
-        }
-        assert!(persistent_state.log.iter().eq(log.iter()));
+        let state = State::create_state(FOLLOWER);
+        let mut test_case = TestCase::new(state, VOTE)
+            .responses(&[VOTE_YES_RESPONSE.reverse_sender()])
+            .set_voted(0);
+        test_case.run();
     }
 
     #[test]
     fn test_vote_longer_log_length_older_term() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2]),
-        };
-        let log = Vec::from([
-            Entry::config(0, config),
-            Entry::command(1, 10),
-            Entry::command(2, 4),
-            Entry::command(3, 5),
-            Entry::command(3, 6),
-        ]);
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 4,
-            log: log.clone(),
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState::default();
-        let follower = Follower::default();
-        let original_request: Request<u32, u32> = Request {
-            sender: 2,
-            reciever: persistent_state.id,
-            term: 4,
-            event: Event::Vote(request::Vote {
-                log_state: LogState { term: 2, length: 6 },
-            }),
-        };
-
-        let mut state_machine = Sum::default();
-
-        let (requests, next) = follower.handle_request(
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-            original_request,
-        );
-
-        if let RaftState::Follower(_) = next {
-        } else {
-            panic!("Didn't transition to follower!");
-        }
-        assert!(requests.len() == 1);
-        assert!(persistent_state.current_term == 4);
-        assert!(persistent_state.voted_for == Some(2));
-        for request in requests {
-            assert!(request.sender == persistent_state.id);
-            assert!(request.reciever == 2);
-            assert!(request.term == persistent_state.current_term);
-            match request.event {
-                Event::VoteResponse(event) => {
-                    assert!(event.success);
-                }
-                _ => {
-                    panic!("Non-vote response!");
-                }
-            }
-        }
-        assert!(persistent_state.log.iter().eq(log.iter()));
+        let state = State::create_state(FOLLOWER);
+        let mut test_case = TestCase::new(state, VOTE_OLD_LONG)
+            .responses(&[VOTE_YES_RESPONSE.reverse_sender()])
+            .set_voted(0);
+        test_case.run();
     }
+
     #[test]
     fn test_client_request() {
         let config = Config {

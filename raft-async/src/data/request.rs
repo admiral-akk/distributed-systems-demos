@@ -171,6 +171,32 @@ pub mod test_util {
         }),
     };
 
+    pub const VOTE_NEW_SHORT: Request<u32, u32> = Request {
+        term: 4,
+        sender: 0,
+        reciever: 1,
+        event: Event::Vote(Vote {
+            log_state: LogState { term: 4, length: 2 },
+        }),
+    };
+
+    pub const VOTE_OLD_EQUAL: Request<u32, u32> = Request {
+        term: 4,
+        sender: 0,
+        reciever: 1,
+        event: Event::Vote(Vote {
+            log_state: LogState { term: 2, length: 3 },
+        }),
+    };
+    pub const VOTE_OLD_LONG: Request<u32, u32> = Request {
+        term: 4,
+        sender: 0,
+        reciever: 1,
+        event: Event::Vote(Vote {
+            log_state: LogState { term: 2, length: 4 },
+        }),
+    };
+
     pub const VOTE_NO_RESPONSE: Request<u32, u32> = Request {
         term: 4,
         sender: 0,
@@ -182,7 +208,7 @@ pub mod test_util {
         term: 4,
         sender: 0,
         reciever: 1,
-        event: Event::VoteResponse(VoteResponse { success: false }),
+        event: Event::VoteResponse(VoteResponse { success: true }),
     };
 
     pub const INSERT_SUCCESS_RESPONSE: Request<u32, u32> = Request {
@@ -192,19 +218,19 @@ pub mod test_util {
         event: Event::InsertResponse(InsertResponse { success: true }),
     };
 
-    pub fn INSERT(index: usize) -> Request<u32, u32> {
+    pub fn INSERT(prev_length: usize) -> Request<u32, u32> {
         let log = LOG_LEADER();
-        let max_index = index.min(log.len() - 1);
+        let max_prev_index = (prev_length - 1).min(log.len() - 1);
         Request {
             term: 4,
             sender: 0,
             reciever: 1,
             event: Event::Insert(Insert {
                 prev_log_state: LogState {
-                    term: log[max_index].term,
-                    length: index,
+                    term: log[max_prev_index].term,
+                    length: prev_length,
                 },
-                entries: log[max_index..(max_index + 1)].into(),
+                entries: log[(max_prev_index + 1)..(max_prev_index + 2)].into(),
                 leader_commit: 4,
             }),
         }

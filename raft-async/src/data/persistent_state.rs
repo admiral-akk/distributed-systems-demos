@@ -217,6 +217,8 @@ pub mod test_util {
             Entry::command(1, 10),
             Entry::command(3, 4),
             Entry::command(3, 5),
+            Entry::command(3, 1),
+            Entry::command(3, 2),
         ])
     }
 
