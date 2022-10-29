@@ -112,10 +112,10 @@ mod tests {
     use crate::Sum;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
-    #[test]
-    fn test_tick() {
+
+    fn setup() -> (Follower, VolitileState, PersistentState<u32>, Sum) {
         let config = Config {
-            servers: HashSet::from([0, 1, 2]),
+            servers: HashSet::from([0, 1, 2, 3, 4]),
         };
         let log = Vec::from([
             Entry::config(0, config),
@@ -123,26 +123,29 @@ mod tests {
             Entry::command(2, 4),
         ]);
 
-        let mut persistent_state: PersistentState<u32> = PersistentState {
+        let persistent_state: PersistentState<u32> = PersistentState {
             id: 1,
             current_term: 3,
             log,
             ..Default::default()
         };
-        let mut volitile_state = VolitileState {
-            commit_index: 0,
-            tick_since_start: 0,
-        };
-        let follower = Follower::default();
-        let _term = persistent_state.current_term;
+        (
+            Follower::default(),
+            VolitileState::default(),
+            persistent_state,
+            Sum::default(),
+        )
+    }
+
+    #[test]
+    fn test_tick() {
+        let (mut follower, mut volitile_state, mut persistent_state, mut state_machine) = setup();
         let request: Request<u32, u32> = Request {
             sender: 10,
-            reciever: persistent_state.id,
+            reciever: 1,
             term: 0,
             event: Event::Tick(request::Tick),
         };
-
-        let mut state_machine = Sum::default();
 
         let (requests, next) = follower.handle_request(
             &mut volitile_state,
@@ -161,35 +164,14 @@ mod tests {
 
     #[test]
     fn test_timeout() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2]),
-        };
-        let log = Vec::from([
-            Entry::config(0, config),
-            Entry::command(1, 10),
-            Entry::command(2, 4),
-        ]);
-
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 3,
-            log,
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState {
-            commit_index: 0,
-            tick_since_start: 1000000,
-        };
-        let follower = Follower::default();
-        let term = persistent_state.current_term;
+        let (mut follower, mut volitile_state, mut persistent_state, mut state_machine) = setup();
         let request: Request<u32, u32> = Request {
             sender: 10,
-            reciever: persistent_state.id,
+            reciever: 1,
             term: 0,
             event: Event::Tick(request::Tick),
         };
-
-        let mut state_machine = Sum::default();
+        volitile_state.tick_since_start = 10000;
 
         let (requests, next) = follower.handle_request(
             &mut volitile_state,
@@ -199,11 +181,11 @@ mod tests {
         );
 
         if let RaftState::Candidate(_) = next {
-            assert!(persistent_state.current_term == term + 1);
+            assert!(persistent_state.current_term == 4);
         } else {
             panic!("Didn't transition to candidate!");
         }
-        assert!(requests.len() == 2);
+        assert!(requests.len() == 4);
         assert_eq!(volitile_state.tick_since_start, 0);
         for request in requests {
             assert!(request.sender == persistent_state.id);
@@ -222,41 +204,24 @@ mod tests {
 
     #[test]
     fn test_append_old_leader() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2]),
-        };
-        let log = Vec::from([
-            Entry::config(0, config),
-            Entry::command(1, 10),
-            Entry::command(2, 4),
-        ]);
-
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 6,
-            log: log.clone(),
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState::default();
-        let follower = Follower::default();
-        let original_request: Request<u32, u32> = Request {
+        let (mut follower, mut volitile_state, mut persistent_state, mut state_machine) = setup();
+        let request: Request<u32, u32> = Request {
             sender: 0,
-            reciever: persistent_state.id,
-            term: 4,
+            reciever: 1,
+            term: 2,
             event: Event::Insert(request::Insert {
                 prev_log_state: LogState { term: 2, length: 2 },
                 entries: Vec::from([Entry::command(3, 5)]),
                 leader_commit: 2,
             }),
         };
-
-        let mut state_machine = Sum::default();
+        volitile_state.tick_since_start = 10000;
 
         let (requests, next) = follower.handle_request(
             &mut volitile_state,
             &mut persistent_state,
             &mut state_machine,
-            original_request,
+            request,
         );
 
         if let RaftState::Follower(_) = next {
@@ -283,7 +248,6 @@ mod tests {
                 }
             }
         }
-        assert!(log.iter().eq(persistent_state.log.iter()));
         assert!(volitile_state.get_commit_index() == 0);
     }
 
