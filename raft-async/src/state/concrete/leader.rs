@@ -201,14 +201,40 @@ impl EventHandler for Leader {
 pub mod test_util {
     use crate::state::raft_state::RaftState;
 
-    pub fn BASE_LEADER(log_length: usize) -> RaftState {
+    use super::Leader;
+
+    pub fn BASE_LEADER(log_length: usize, match_index: usize) -> RaftState {
         RaftState::Leader(super::Leader {
             next_index: (0..5)
                 .filter(|id| *id != 1)
                 .map(|id| (id, log_length))
                 .collect(),
-            match_index: (0..5).filter(|id| *id != 1).map(|id| (id, 0)).collect(),
+            match_index: (0..5)
+                .filter(|id| *id != 1)
+                .map(|id| (id, match_index))
+                .collect(),
         })
+    }
+
+    impl RaftState {
+        pub fn set_next_index(mut self, id: u32, index: usize) -> Self {
+            match &mut self {
+                RaftState::Leader(Leader { next_index, .. }) => {
+                    next_index.insert(id, index);
+                }
+                _ => {}
+            }
+            self
+        }
+        pub fn set_match_index(mut self, id: u32, index: usize) -> Self {
+            match &mut self {
+                RaftState::Leader(Leader { match_index, .. }) => {
+                    match_index.insert(id, index);
+                }
+                _ => {}
+            }
+            self
+        }
     }
 }
 
@@ -216,331 +242,53 @@ pub mod test_util {
 mod tests {
     use std::collections::HashSet;
 
+    use crate::data::persistent_state::test_util::{LOG, LOG_WITH_CLIENT};
     use crate::data::persistent_state::{Config, Entry};
+    use crate::data::request::test_util::{
+        CLIENT_COMMAND, INSERT_FAILED_RESPONSE, INSERT_SUCCESS_RESPONSE, MASS_HEARTBEAT, TICK,
+    };
     use crate::data::request::{self, Data, Event};
+    use crate::state::concrete::leader::test_util::BASE_LEADER;
+    use crate::state::state::test_util::TestCase;
+    use crate::state::state::State;
     use crate::Sum;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
     #[test]
-    fn test_elected() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2, 3, 4]),
-        };
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 3,
-            log: Vec::from([
-                Entry::config(0, config),
-                Entry::command(1, 10),
-                Entry::command(3, 4),
-            ]),
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState {
-            commit_index: 1,
-            tick_since_start: 10,
-        };
-
-        let (requests, next): (Vec<Request<_, u32>>, _) = Leader::from_candidate(
-            Candidate::default(),
-            &mut volitile_state,
-            &mut persistent_state,
-        );
-
-        if let RaftState::Leader(Leader {
-            next_index,
-            match_index,
-        }) = next
-        {
-            for (_, v) in next_index {
-                assert_eq!(v, persistent_state.log.len());
-            }
-            for (_, v) in match_index {
-                assert_eq!(v, 0);
-            }
-        } else {
-            panic!("Transitioned to non-leader state!");
-        }
-        assert_eq!(volitile_state.tick_since_start, 0);
-        assert!(requests.len() == 4);
-        for request in requests {
-            assert!(request.sender == persistent_state.id);
-            assert!(request.term == persistent_state.current_term);
-            match request.event {
-                Event::Insert(event) => {
-                    assert_eq!(event.prev_log_state.length, 3);
-                    assert_eq!(event.prev_log_state.term, 3);
-                    assert_eq!(event.leader_commit, 1);
-                    assert!(event.entries.is_empty());
-                }
-                _ => {
-                    panic!("Non-append event!")
-                }
-            }
-        }
-    }
-
-    #[test]
     fn test_tick() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2, 3, 4]),
-        };
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 3,
-            log: Vec::from([
-                Entry::config(0, config),
-                Entry::command(1, 10),
-                Entry::command(3, 4),
-            ]),
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState {
-            commit_index: 1,
-            tick_since_start: 0,
-        };
-        let request: Request<u32, u32> = Request {
-            sender: 0,
-            reciever: persistent_state.id,
-            term: 0,
-            event: Event::Tick(request::Tick),
-        };
-        let leader = Leader {
-            next_index: HashMap::from([(0, 3), (2, 3), (3, 3), (4, 3)]),
-            match_index: HashMap::from([(0, 0), (2, 0), (3, 0), (4, 0)]),
-        };
-
-        let mut state_machine = Sum::default();
-
-        let (requests, next) = leader.handle_request(
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-            request,
-        );
-
-        assert_eq!(volitile_state.tick_since_start, 1);
-        if let RaftState::Leader(_) = next {
-        } else {
-            panic!("Didn't transition to leader!");
-        }
-        assert!(requests.len() == 4);
-        for request in requests {
-            assert!(request.sender == persistent_state.id);
-            assert!(request.term == persistent_state.current_term);
-            match request.event {
-                Event::Insert(event) => {
-                    assert_eq!(event.prev_log_state.length, 3);
-                    assert_eq!(event.prev_log_state.term, 3);
-                    assert_eq!(event.leader_commit, 1);
-                    assert!(event.entries.is_empty());
-                }
-                _ => {
-                    panic!("Non-append event!")
-                }
-            }
-        }
+        let state = State::create_state(BASE_LEADER(3, 2));
+        let mut test_case = TestCase::new(state, TICK)
+            .increment_tick()
+            .responses(&MASS_HEARTBEAT(4));
+        test_case.run();
     }
 
     #[test]
     fn test_append_response_success() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2, 3, 4]),
-        };
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 3,
-            log: Vec::from([
-                Entry::config(0, config),
-                Entry::command(1, 10),
-                Entry::command(3, 4),
-            ]),
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState {
-            commit_index: 2,
-            ..Default::default()
-        };
-        let request: Request<u32, u32> = Request {
-            sender: 4,
-            reciever: persistent_state.id,
-            term: 3,
-            event: Event::InsertResponse(request::InsertResponse { success: true }),
-        };
-
-        let leader = Leader {
-            next_index: HashMap::from([(0, 2), (2, 2), (3, 2), (4, 1)]),
-            match_index: HashMap::from([(0, 0), (2, 0), (3, 0), (4, 0)]),
-        };
-
-        let mut state_machine = Sum::default();
-
-        let (requests, next) = leader.handle_request(
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-            request,
-        );
-
-        if let RaftState::Leader(leader) = next {
-            assert_eq!(leader.next_index[&4], 2);
-            assert_eq!(leader.match_index[&4], 2);
-        } else {
-            panic!("Didn't transition to leader!");
-        }
-        assert!(requests.is_empty());
+        let state = State::create_state(BASE_LEADER(3, 2)).set_next_index(0, 2);
+        let mut test_case = TestCase::new(state, INSERT_SUCCESS_RESPONSE)
+            .set_rs(BASE_LEADER(3, 2).set_match_index(0, 3));
+        test_case.run();
     }
 
     #[test]
     fn test_append_response_succeeds_up_to_date() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2, 3, 4]),
-        };
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 4,
-            log: Vec::from([
-                Entry::config(0, config),
-                Entry::command(1, 10),
-                Entry::command(3, 4),
-            ]),
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState {
-            commit_index: 1,
-            ..Default::default()
-        };
-        let request: Request<u32, u32> = Request {
-            sender: 0,
-            reciever: persistent_state.id,
-            term: 4,
-            event: Event::InsertResponse(request::InsertResponse { success: true }),
-        };
-
-        let leader = Leader {
-            next_index: HashMap::from([(0, 3), (2, 2), (3, 2), (4, 1)]),
-            match_index: HashMap::from([(0, 0), (2, 0), (3, 0), (4, 0)]),
-        };
-
-        let mut state_machine = Sum::default();
-
-        let (requests, next) = leader.handle_request(
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-            request,
-        );
-
-        if let RaftState::Leader(leader) = next {
-            assert_eq!(leader.next_index[&0], 3);
-            assert_eq!(leader.match_index[&0], 3);
-        } else {
-            panic!("Didn't transition to leader!");
-        }
-        assert!(requests.is_empty());
+        let state = State::create_state(BASE_LEADER(3, 2));
+        let mut test_case = TestCase::new(state, INSERT_SUCCESS_RESPONSE).set_match_index(0, 3);
+        test_case.run();
     }
 
     #[test]
     fn test_append_response_fails() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2, 3, 4]),
-        };
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 3,
-            log: Vec::from([
-                Entry::config(0, config),
-                Entry::command(1, 10),
-                Entry::command(3, 4),
-            ]),
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState {
-            commit_index: 1,
-            ..Default::default()
-        };
-        let request: Request<u32, u32> = Request {
-            sender: 0,
-            reciever: persistent_state.id,
-            term: 3,
-            event: Event::InsertResponse(request::InsertResponse { success: false }),
-        };
-
-        let leader = Leader {
-            next_index: HashMap::from([(0, 2), (2, 2), (3, 2), (4, 1)]),
-            match_index: HashMap::from([(0, 0), (2, 0), (3, 0), (4, 0)]),
-        };
-
-        let mut state_machine = Sum::default();
-
-        let (requests, next) = leader.handle_request(
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-            request,
-        );
-
-        if let RaftState::Leader(leader) = next {
-            assert_eq!(leader.next_index[&0], 1);
-            assert_eq!(leader.match_index[&0], 0);
-        } else {
-            panic!("Didn't transition to leader!");
-        }
-        assert!(requests.is_empty());
+        let state = State::create_state(BASE_LEADER(3, 2));
+        let mut test_case = TestCase::new(state, INSERT_FAILED_RESPONSE).set_next_index(0, 2);
+        test_case.run();
     }
-
     #[test]
     fn test_client_request() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2, 3, 4]),
-        };
-        let log = Vec::from([
-            Entry::config(0, config),
-            Entry::command(1, 10),
-            Entry::command(3, 4),
-        ]);
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 3,
-            log: log.clone(),
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState {
-            commit_index: 1,
-            ..Default::default()
-        };
-        let request: Request<u32, u32> = Request {
-            sender: 0,
-            reciever: persistent_state.id,
-            term: 0,
-            event: Event::Client(request::Client {
-                data: Data::Command(2),
-            }),
-        };
-
-        let leader = Leader {
-            next_index: HashMap::from([(0, 2), (2, 2), (3, 2), (4, 1)]),
-            match_index: HashMap::from([(0, 0), (2, 0), (3, 0), (4, 0)]),
-        };
-
-        let mut state_machine = Sum::default();
-
-        let (requests, next) = leader.handle_request(
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-            request,
-        );
-
-        if let RaftState::Leader(_) = next {
-        } else {
-            panic!("Didn't transition to leader!");
-        }
-        assert!(requests.is_empty());
-        assert_eq!(volitile_state.get_commit_index(), 1);
-        assert_eq!(persistent_state.log.len(), 4);
-        assert!(log.iter().eq(persistent_state.log[0..3].iter()));
-        assert!(Entry::command(3, 2).eq(&persistent_state.log[3]));
+        let state = State::create_state(BASE_LEADER(3, 2));
+        let mut test_case = TestCase::new(state, CLIENT_COMMAND).set_log(LOG_WITH_CLIENT());
+        test_case.run();
     }
 }

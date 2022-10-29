@@ -212,14 +212,16 @@ pub mod test_util {
         }
     }
     pub fn LOG_LEADER() -> Vec<Entry<u32>> {
-        Vec::from([
-            Entry::config(0, CONFIG()),
-            Entry::command(1, 10),
-            Entry::command(3, 4),
-            Entry::command(3, 5),
-            Entry::command(3, 1),
-            Entry::command(3, 2),
-        ])
+        let mut log = LOG();
+        log.extend(
+            [
+                Entry::command(3, 5),
+                Entry::command(3, 1),
+                Entry::command(3, 2),
+            ]
+            .into_iter(),
+        );
+        log
     }
 
     pub fn LOG() -> Vec<Entry<u32>> {
@@ -228,6 +230,12 @@ pub mod test_util {
             Entry::command(1, 10),
             Entry::command(3, 4),
         ])
+    }
+
+    pub fn LOG_WITH_CLIENT() -> Vec<Entry<u32>> {
+        let mut log = LOG();
+        log.extend([Entry::command(4, 100)].into_iter());
+        log
     }
 
     pub fn MISMATCH_LOG() -> Vec<Entry<u32>> {

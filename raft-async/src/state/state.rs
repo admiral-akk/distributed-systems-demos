@@ -140,6 +140,14 @@ pub mod test_util {
             self.state_machine.total = total;
             self
         }
+        pub fn set_next_index(mut self, id: u32, index: usize) -> Self {
+            self.raft_state = self.raft_state.set_next_index(id, index);
+            self
+        }
+        pub fn set_match_index(mut self, id: u32, index: usize) -> Self {
+            self.raft_state = self.raft_state.set_match_index(id, index);
+            self
+        }
     }
 
     pub struct TestCase {
@@ -194,6 +202,12 @@ pub mod test_util {
             self
         }
 
+        pub fn increment_tick(mut self) -> Self {
+            self.expected_state.volitile_state =
+                self.expected_state.volitile_state.increment_tick();
+            self
+        }
+
         pub fn set_term(mut self, term: u32) -> Self {
             self.expected_state = self.expected_state.set_term(term);
             self
@@ -201,6 +215,14 @@ pub mod test_util {
 
         pub fn set_commit(mut self, commit_index: usize) -> Self {
             self.expected_state = self.expected_state.set_commit(commit_index);
+            self
+        }
+        pub fn set_next_index(mut self, id: u32, index: usize) -> Self {
+            self.expected_state = self.expected_state.set_next_index(id, index);
+            self
+        }
+        pub fn set_match_index(mut self, id: u32, index: usize) -> Self {
+            self.expected_state = self.expected_state.set_match_index(id, index);
             self
         }
 

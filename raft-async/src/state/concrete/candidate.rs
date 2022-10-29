@@ -186,7 +186,7 @@ mod tests {
     fn test_request_vote_successful_elected() {
         let state = State::create_state(CANDIDATE(&[1, 2])).set_voted(1);
         let mut test_case = TestCase::new(state, VOTE_YES_RESPONSE)
-            .set_rs(BASE_LEADER(3))
+            .set_rs(BASE_LEADER(3, 0))
             .set_term(5)
             .responses(&MASS_HEARTBEAT(5));
         test_case.run();
