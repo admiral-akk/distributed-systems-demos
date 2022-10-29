@@ -149,12 +149,25 @@ pub mod test_util {
         event: Event::Tick(Tick),
     };
 
+    pub fn REQUEST_VOTES(term: u32) -> Vec<Request<u32, u32>> {
+        let request = VOTE.reverse_sender();
+        (0..5)
+            .filter(|id| !request.sender.eq(id))
+            .map(|id| {
+                let mut request = request.clone();
+                request.reciever = id;
+                request.term = term;
+                request
+            })
+            .collect()
+    }
+
     pub const VOTE: Request<u32, u32> = Request {
         term: 4,
         sender: 0,
         reciever: 1,
         event: Event::Vote(Vote {
-            log_state: LogState { term: 2, length: 3 },
+            log_state: LogState { term: 3, length: 3 },
         }),
     };
 
@@ -202,7 +215,7 @@ pub mod test_util {
         sender: 0,
         reciever: 1,
         event: Event::Insert(Insert {
-            prev_log_state: LogState { term: 2, length: 3 },
+            prev_log_state: LogState { term: 3, length: 3 },
             entries: Vec::new(),
             leader_commit: 3,
         }),

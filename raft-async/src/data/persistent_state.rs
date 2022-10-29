@@ -199,6 +199,11 @@ pub mod test_util {
             self.voted_for = Some(voted_for);
             self
         }
+
+        pub fn increment_term(mut self) -> Self {
+            self.current_term += 1;
+            self
+        }
     }
 
     pub fn CONFIG() -> Config {

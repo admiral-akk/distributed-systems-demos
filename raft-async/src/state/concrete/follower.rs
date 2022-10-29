@@ -120,12 +120,15 @@ mod tests {
     };
     use crate::data::persistent_state::{Config, Entry, LogState};
     use crate::data::request::test_util::{
-        INSERT, INSERT_FAILED_RESPONSE, INSERT_SUCCESS_RESPONSE, TICK,
+        INSERT, INSERT_FAILED_RESPONSE, INSERT_SUCCESS_RESPONSE, REQUEST_VOTES, TICK,
     };
     use crate::data::request::{self, Data};
     use crate::data::volitile_state::test_util::{VOLITILE_STATE, VOLITILE_STATE_TIMEOUT};
+    use crate::state::concrete::candidate::test_util::CANDIDATE;
     use crate::state::concrete::follower::test_util::FOLLOWER;
     use crate::state::concrete::follower::Follower;
+    use crate::state::state::test_util::TestCase;
+    use crate::state::state::State;
     use crate::test_util::STATE_MACHINE;
     use crate::Sum;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -133,102 +136,39 @@ mod tests {
 
     #[test]
     fn test_tick() {
-        let (mut state, mut volitile_state, mut persistent_state, mut state_machine, request) = (
-            FOLLOWER,
-            VOLITILE_STATE,
-            PERSISTENT_STATE(),
-            STATE_MACHINE(),
-            TICK,
-        );
+        let state = State::create_state(FOLLOWER);
 
-        let (requests, state) = state.handle_request(
-            request,
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-        );
-
-        if let RaftState::Follower(_) = state {
-        } else {
-            panic!("Didn't transition to follower!");
-        }
-        assert!(requests.len() == 0);
-        assert_eq!(volitile_state.tick_since_start, 1);
+        let mut test_case = TestCase::new(state, TICK).set_vs(VOLITILE_STATE.increment_tick());
+        test_case.run();
     }
 
     #[test]
     fn test_timeout() {
-        let (mut state, mut volitile_state, mut persistent_state, mut state_machine, request) = (
-            FOLLOWER,
-            VOLITILE_STATE_TIMEOUT,
-            PERSISTENT_STATE(),
-            STATE_MACHINE(),
-            TICK,
-        );
+        let state = State::create_state(FOLLOWER).set_vs(VOLITILE_STATE_TIMEOUT);
 
-        let (_, state) = state.handle_request(
-            request,
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-        );
-
-        if let RaftState::Candidate(_) = state {
-        } else {
-            panic!("Didn't start election!");
-        }
+        let mut test_case = TestCase::new(state, TICK)
+            .set_rs(CANDIDATE())
+            .set_vs(VOLITILE_STATE)
+            .set_ps(PERSISTENT_STATE().increment_term().set_voted(1))
+            .responses(&REQUEST_VOTES(5));
+        test_case.run();
     }
 
     #[test]
     fn test_append_old_leader() {
-        let (mut state, mut volitile_state, mut persistent_state, mut state_machine, mut request) = (
-            FOLLOWER,
-            VOLITILE_STATE,
-            PERSISTENT_STATE(),
-            STATE_MACHINE(),
-            INSERT(3).set_term(2),
-        );
-
-        let (requests, state) = state.handle_request(
-            request,
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-        );
-
-        if let RaftState::Follower(_) = state {
-        } else {
-            panic!("Didn't remain a follower!");
-        }
-        assert_eq!(persistent_state, PERSISTENT_STATE());
-        assert_eq!(volitile_state, VOLITILE_STATE);
-        assert_eq!(requests, [INSERT_FAILED_RESPONSE.reverse_sender()]);
+        let state = State::create_state(FOLLOWER);
+        let mut test_case = TestCase::new(state, INSERT(1).set_term(2))
+            .responses(&[INSERT_FAILED_RESPONSE.reverse_sender()]);
+        test_case.run();
     }
 
     #[test]
     fn test_append_log_too_short() {
-        let (mut state, mut volitile_state, mut persistent_state, mut state_machine, mut request) = (
-            FOLLOWER,
-            VOLITILE_STATE,
-            PERSISTENT_STATE(),
-            STATE_MACHINE(),
-            INSERT(13),
-        );
-
-        let (requests, state) = state.handle_request(
-            request,
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-        );
-
-        if let RaftState::Follower(_) = state {
-        } else {
-            panic!("Didn't remain a follower!");
-        }
-        assert_eq!(persistent_state, PERSISTENT_STATE().set_voted(0));
-        assert_eq!(volitile_state, VOLITILE_STATE);
-        assert_eq!(requests, [INSERT_FAILED_RESPONSE.reverse_sender()]);
+        let state = State::create_state(FOLLOWER);
+        let mut test_case = TestCase::new(state, INSERT(10))
+            .responses(&[INSERT_FAILED_RESPONSE.reverse_sender()])
+            .set_voted(0);
+        test_case.run();
     }
 
     #[test]

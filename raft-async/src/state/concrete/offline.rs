@@ -59,39 +59,28 @@ pub mod test_util {
 #[cfg(test)]
 mod tests {
 
-    use crate::data::persistent_state::test_util::PERSISTENT_STATE;
     use crate::data::request::test_util::TICK;
-    use crate::data::volitile_state::test_util::{
-        FRESH_VOLITILE_STATE, VOLITILE_STATE, VOLITILE_STATE_TIMEOUT,
-    };
+    use crate::data::volitile_state::test_util::{VOLITILE_STATE, VOLITILE_STATE_TIMEOUT};
     use crate::state::concrete::follower::test_util::FOLLOWER;
     use crate::state::concrete::offline::test_util::OFFLINE;
-    use crate::state::state::test_util::{create_state, TestCase};
-    use crate::test_util::STATE_MACHINE;
+    use crate::state::state::test_util::TestCase;
+    use crate::state::state::State;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
-    use super::*;
 
     #[test]
     fn test_tick() {
-        let state = create_state(STATE_MACHINE(), PERSISTENT_STATE(), OFFLINE, VOLITILE_STATE);
-        let request = TICK;
-        let mut test_case =
-            TestCase::new(state, request, "Offline - Tick").set_vs(VOLITILE_STATE.increment_tick());
+        let state = State::create_state(OFFLINE);
+        let mut test_case = TestCase::new(state, TICK).set_vs(VOLITILE_STATE.increment_tick());
         test_case.run();
     }
 
     #[test]
     fn test_reboot() {
-        let state = create_state(
-            STATE_MACHINE(),
-            PERSISTENT_STATE(),
-            OFFLINE,
-            VOLITILE_STATE_TIMEOUT,
-        );
-        let request = TICK;
-        let mut test_case = TestCase::new(state, request, "Offline - Tick")
-            .set_vs(VOLITILE_STATE.set_commit(0))
-            .set_rs(FOLLOWER);
+        let state = State::create_state(OFFLINE).set_vs(VOLITILE_STATE_TIMEOUT);
+
+        let mut test_case = TestCase::new(state, TICK)
+            .set_rs(FOLLOWER)
+            .set_vs(crate::data::volitile_state::test_util::FRESH_VOLITILE_STATE);
         test_case.run();
     }
 }

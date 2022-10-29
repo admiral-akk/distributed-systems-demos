@@ -98,6 +98,16 @@ impl Candidate {
         )
     }
 }
+#[cfg(test)]
+pub mod test_util {
+    use crate::state::raft_state::RaftState;
+
+    use super::Candidate;
+
+    pub fn CANDIDATE() -> RaftState {
+        RaftState::Candidate(Candidate::default())
+    }
+}
 
 #[cfg(test)]
 mod tests {

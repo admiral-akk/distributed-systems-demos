@@ -81,77 +81,93 @@ impl<T: CommandType, SM: Default> State<T, SM> {
 pub mod test_util {
     use crate::{
         data::{
-            data_type::{CommandType, OutputType},
-            persistent_state::PersistentState,
+            persistent_state::{test_util::PERSISTENT_STATE, PersistentState},
             request::Request,
-            volitile_state::VolitileState,
+            volitile_state::{test_util::VOLITILE_STATE, VolitileState},
         },
         state::raft_state::RaftState,
+        Sum,
     };
     use pretty_assertions::assert_eq;
 
-    use super::{State, StateMachine};
+    use super::State;
 
-    pub fn create_state<In: CommandType, SM>(
-        state_machine: SM,
-        persistent_state: PersistentState<In>,
-        raft_state: RaftState,
-        volitile_state: VolitileState,
-    ) -> State<In, SM> {
-        State {
-            state_machine,
-            persistent_state,
-            raft_state,
-            volitile_state,
+    impl State<u32, Sum> {
+        pub fn create_state(raft_state: RaftState) -> State<u32, Sum> {
+            State {
+                state_machine: Sum::default(),
+                persistent_state: PERSISTENT_STATE(),
+                raft_state,
+                volitile_state: VOLITILE_STATE,
+            }
+        }
+
+        pub fn set_rs(mut self, raft_state: RaftState) -> Self {
+            self.raft_state = raft_state;
+            self
+        }
+
+        pub fn set_ps(mut self, persistent_state: PersistentState<u32>) -> Self {
+            self.persistent_state = persistent_state;
+            self
+        }
+
+        pub fn set_vs(mut self, volitile_state: VolitileState) -> Self {
+            self.volitile_state = volitile_state;
+            self
         }
     }
 
-    pub struct TestCase<In: CommandType, Out: OutputType, SM: StateMachine<In, Out>> {
-        pub state: State<In, SM>,
-        pub request: Request<In, Out>,
-        pub expected_state: State<In, SM>,
-        pub expected_responses: Vec<Request<In, Out>>,
-        pub name: String,
+    pub struct TestCase {
+        state: State<u32, Sum>,
+        request: Request<u32, u32>,
+        expected_state: State<u32, Sum>,
+        expected_responses: Vec<Request<u32, u32>>,
     }
 
-    impl<In: CommandType, Out: OutputType, SM: StateMachine<In, Out>> TestCase<In, Out, SM> {
-        pub fn new(state: State<In, SM>, request: Request<In, Out>, name: &str) -> Self {
+    impl TestCase {
+        pub fn new(state: State<u32, Sum>, request: Request<u32, u32>) -> Self {
             Self {
                 expected_state: state.clone(),
                 expected_responses: Vec::new(),
                 request,
                 state,
-                name: name.to_string(),
             }
         }
-        pub fn responses(mut self, responses: &[Request<In, Out>]) -> Self {
+        pub fn responses(mut self, responses: &[Request<u32, u32>]) -> Self {
             self.expected_responses = responses.into();
+            self.expected_responses
+                .sort_by(|r_1, r_2| r_1.reciever.cmp(&r_2.reciever));
             self
         }
 
         pub fn set_rs(mut self, raft_state: RaftState) -> Self {
-            self.expected_state.raft_state = raft_state;
+            self.expected_state = self.expected_state.set_rs(raft_state);
+            self
+        }
+
+        pub fn set_voted(mut self, voted_for: u32) -> Self {
+            self.expected_state.persistent_state.voted_for = Some(voted_for);
+            self
+        }
+
+        pub fn set_ps(mut self, persistent_state: PersistentState<u32>) -> Self {
+            self.expected_state = self.expected_state.set_ps(persistent_state);
             self
         }
 
         pub fn set_vs(mut self, volitile_state: VolitileState) -> Self {
-            self.expected_state.volitile_state = volitile_state;
+            self.expected_state = self.expected_state.set_vs(volitile_state);
             self
         }
 
         pub fn run(&mut self) {
-            let responses;
+            let mut responses;
             (responses, self.state) = self.state.clone().handle_request(self.request.clone());
-            assert_eq!(
-                self.state, self.expected_state,
-                "State mismatch for case: {}",
-                self.name
-            );
-            assert_eq!(
-                responses, self.expected_responses,
-                "Response mismatch for case: {}",
-                self.name
-            );
+
+            responses.sort_by(|r_1, r_2| r_1.reciever.cmp(&r_2.reciever));
+            assert_eq!(self.state, self.expected_state,);
+            assert_eq!(responses, self.expected_responses,);
         }
     }
 }
