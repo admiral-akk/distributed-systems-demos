@@ -13,7 +13,7 @@ mod server;
 mod state;
 
 #[derive(Default, Debug, Clone)]
-struct Sum {
+pub struct Sum {
     total: u32,
 }
 
@@ -58,4 +58,13 @@ fn main() {
             task::sleep(Duration::from_secs(100)).await
         }
     }));
+}
+
+#[cfg(test)]
+pub mod test_util {
+    use crate::Sum;
+
+    pub fn STATE_MACHINE() -> Sum {
+        Sum::default()
+    }
 }

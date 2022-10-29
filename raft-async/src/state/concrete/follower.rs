@@ -215,7 +215,7 @@ mod tests {
                 leader_commit: 2,
             }),
         };
-        volitile_state.tick_since_start = 10000;
+        volitile_state.tick_since_start = 0;
 
         let (requests, next) = follower.handle_request(
             &mut volitile_state,
@@ -229,7 +229,7 @@ mod tests {
             panic!("Didn't transition to follower!");
         }
         assert!(requests.len() == 1);
-        assert!(persistent_state.current_term == 6);
+        assert!(persistent_state.current_term == 3);
         assert_eq!(volitile_state.tick_since_start, 0);
         assert!(
             persistent_state.voted_for == None,

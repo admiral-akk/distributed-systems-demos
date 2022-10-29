@@ -48,91 +48,72 @@ impl EventHandler for Offline {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::collections::HashSet;
+pub mod test_util {
+    use crate::state::raft_state::RaftState;
 
-    use crate::data::persistent_state::{Config, Entry};
-    use crate::data::request::{self, test_util, Event};
-    use crate::Sum;
+    use super::Offline;
+
+    pub const OFFLINE: RaftState = RaftState::Offline(Offline);
+}
+#[cfg(test)]
+mod tests {
+
+    use crate::data::persistent_state::test_util::PERSISTENT_STATE;
+    use crate::data::request::test_util::TICK;
+    use crate::data::volitile_state::test_util::{VOLITILE_STATE, VOLITILE_STATE_TIMEOUT};
+    use crate::state::concrete::offline::test_util::OFFLINE;
+    use crate::test_util::STATE_MACHINE;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
     #[test]
     fn test_tick() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2]),
-        };
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 3,
-            log: Vec::from([
-                Entry::config(0, config),
-                Entry::command(1, 10),
-                Entry::command(2, 4),
-            ]),
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState {
-            commit_index: 0,
-            tick_since_start: 0,
-        };
-        let follower = Offline {};
-        let request: Request<u32, u32> = test_util::TICK;
-        let mut state_machine = Sum::default();
+        let (mut state, mut volitile_state, mut persistent_state, mut state_machine, request) = (
+            OFFLINE,
+            VOLITILE_STATE,
+            PERSISTENT_STATE(),
+            STATE_MACHINE(),
+            TICK,
+        );
 
-        let (requests, next) = follower.handle_request(
+        let (requests, state) = state.handle_request(
+            request,
             &mut volitile_state,
             &mut persistent_state,
             &mut state_machine,
-            request,
         );
 
-        if let RaftState::Offline(_) = next {
+        if let RaftState::Offline(_) = state {
         } else {
             panic!("Didn't transition to offline!");
         }
         assert!(requests.is_empty());
         assert_eq!(persistent_state.voted_for, None);
         assert_eq!(volitile_state.tick_since_start, 1);
-        assert_eq!(volitile_state.get_commit_index(), 0);
+        assert_eq!(
+            volitile_state.get_commit_index(),
+            VOLITILE_STATE.get_commit_index()
+        );
     }
 
     #[test]
     fn test_reboot() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2]),
-        };
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 3,
-            log: Vec::from([
-                Entry::config(0, config),
-                Entry::command(1, 10),
-                Entry::command(2, 4),
-            ]),
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState {
-            commit_index: 1000,
-            tick_since_start: 100000,
-        };
-        let follower = Offline {};
-        let request: Request<u32, u32> = Request {
-            sender: 10,
-            reciever: persistent_state.id,
-            term: 0,
-            event: Event::Tick(request::Tick),
-        };
-        let mut state_machine = Sum::default();
+        let (mut state, mut volitile_state, mut persistent_state, mut state_machine, request) = (
+            OFFLINE,
+            VOLITILE_STATE_TIMEOUT,
+            PERSISTENT_STATE(),
+            STATE_MACHINE(),
+            TICK,
+        );
 
-        let (requests, next) = follower.handle_request(
+        let (requests, state) = state.handle_request(
+            request,
             &mut volitile_state,
             &mut persistent_state,
             &mut state_machine,
-            request,
         );
 
-        if let RaftState::Follower(_) = next {
+        if let RaftState::Follower(_) = state {
         } else {
             panic!("Didn't transition to follower!");
         }
