@@ -83,7 +83,7 @@ impl Leader {
     }
 
     pub fn from_candidate<T: CommandType, Output>(
-        candidate: Candidate,
+        _candidate: Candidate,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T, Output>>, RaftState) {
@@ -240,20 +240,20 @@ pub mod test_util {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
+    
 
-    use crate::data::persistent_state::test_util::{LOG, LOG_WITH_CLIENT};
-    use crate::data::persistent_state::{Config, Entry};
+    use crate::data::persistent_state::test_util::{LOG_WITH_CLIENT};
+    
     use crate::data::request::test_util::{
         CLIENT_COMMAND, INSERT_FAILED_RESPONSE, INSERT_SUCCESS_RESPONSE, MASS_HEARTBEAT, TICK,
     };
-    use crate::data::request::{self, Data, Event};
+    
     use crate::state::concrete::leader::test_util::BASE_LEADER;
     use crate::state::state::test_util::TestCase;
     use crate::state::state::State;
-    use crate::Sum;
+    
     // Note this useful idiom: importing names from outer (for mod tests) scope.
-    use super::*;
+    
 
     #[test]
     fn test_tick() {

@@ -121,10 +121,10 @@ pub mod test_util {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
+    
 
-    use crate::data::persistent_state::{Config, Entry};
-    use crate::data::request;
+    
+    
     use crate::data::request::test_util::{
         INSERT, MASS_HEARTBEAT, REQUEST_VOTES, TICK, VOTE_NO_RESPONSE, VOTE_YES_RESPONSE,
     };
@@ -134,11 +134,11 @@ mod tests {
     use crate::state::concrete::leader::test_util::BASE_LEADER;
     use crate::state::state::test_util::TestCase;
     use crate::state::state::State;
-    use crate::Sum;
+    
 
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::test_util::BASE_CANDIDATE;
-    use super::*;
+    
 
     #[test]
     fn test_tick() {

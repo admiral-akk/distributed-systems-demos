@@ -1,4 +1,4 @@
-use std::{collections::HashSet, time::Duration};
+use std::{time::Duration};
 
 use async_std::{
     channel::{Receiver, Sender},
