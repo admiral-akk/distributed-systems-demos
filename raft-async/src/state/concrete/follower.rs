@@ -103,37 +103,27 @@ impl EventHandler for Follower {
 }
 #[cfg(test)]
 pub mod test_util {
-    use crate::state::raft_state::RaftState;
-
     use super::Follower;
+    use crate::state::raft_state::RaftState;
 
     pub const FOLLOWER: RaftState = RaftState::Follower(Follower);
 }
 
 #[cfg(test)]
 mod tests {
-    
-    
-
     use crate::data::persistent_state::test_util::{
         LOG, LOG_LEADER, MISMATCH_LOG, PERSISTENT_STATE,
     };
-    
     use crate::data::request::test_util::{
         CLIENT_COMMAND, CLIENT_RESPONSE_NO_LEADER, CLIENT_RESPONSE_WITH_LEADER, INSERT,
         INSERT_FAILED_RESPONSE, INSERT_SUCCESS_RESPONSE, REQUEST_VOTES, TICK, VOTE, VOTE_NEW_SHORT,
         VOTE_NO_RESPONSE, VOTE_OLD_EQUAL, VOTE_OLD_LONG, VOTE_YES_RESPONSE,
     };
-    
     use crate::data::volitile_state::test_util::{VOLITILE_STATE, VOLITILE_STATE_TIMEOUT};
-    use crate::state::concrete::candidate::test_util::{BASE_CANDIDATE};
+    use crate::state::concrete::candidate::test_util::BASE_CANDIDATE;
     use crate::state::concrete::follower::test_util::FOLLOWER;
-    
     use crate::state::state::test_util::TestCase;
     use crate::state::state::State;
-    
-    // Note this useful idiom: importing names from outer (for mod tests) scope.
-    
 
     #[test]
     fn test_tick() {

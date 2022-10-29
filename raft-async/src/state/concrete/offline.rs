@@ -50,22 +50,19 @@ impl EventHandler for Offline {
 
 #[cfg(test)]
 pub mod test_util {
-    use crate::state::raft_state::RaftState;
-
     use super::Offline;
+    use crate::state::raft_state::RaftState;
 
     pub const OFFLINE: RaftState = RaftState::Offline(Offline);
 }
 #[cfg(test)]
 mod tests {
-
     use crate::data::request::test_util::TICK;
     use crate::data::volitile_state::test_util::{VOLITILE_STATE, VOLITILE_STATE_TIMEOUT};
     use crate::state::concrete::follower::test_util::FOLLOWER;
     use crate::state::concrete::offline::test_util::OFFLINE;
     use crate::state::state::test_util::TestCase;
     use crate::state::state::State;
-    // Note this useful idiom: importing names from outer (for mod tests) scope.
 
     #[test]
     fn test_tick() {

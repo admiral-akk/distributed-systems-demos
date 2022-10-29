@@ -191,7 +191,6 @@ impl<T: CommandType> PersistentState<T> {
 
 #[cfg(test)]
 pub mod test_util {
-
     use super::{Config, Entry, PersistentState};
 
     impl<T: Clone> PersistentState<T> {

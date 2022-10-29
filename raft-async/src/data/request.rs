@@ -112,14 +112,13 @@ pub struct Tick;
 
 #[cfg(test)]
 pub mod test_util {
-    use crate::data::{
-        data_type::CommandType,
-        persistent_state::{test_util::LOG_LEADER, Config, LogState},
-    };
-
     use super::{
         ActiveConfig, Client, Crash, Data, Event, Insert, InsertResponse, Request, Tick, Vote,
         VoteResponse,
+    };
+    use crate::data::{
+        data_type::CommandType,
+        persistent_state::{test_util::LOG_LEADER, Config, LogState},
     };
 
     impl<In: CommandType, Out> Request<In, Out> {

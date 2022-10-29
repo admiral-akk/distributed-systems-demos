@@ -103,10 +103,8 @@ impl Candidate {
 }
 #[cfg(test)]
 pub mod test_util {
-
-    use crate::state::raft_state::RaftState;
-
     use super::Candidate;
+    use crate::state::raft_state::RaftState;
 
     pub fn BASE_CANDIDATE() -> RaftState {
         RaftState::Candidate(Candidate { votes: [1].into() })
@@ -121,10 +119,7 @@ pub mod test_util {
 
 #[cfg(test)]
 mod tests {
-    
-
-    
-    
+    use super::test_util::BASE_CANDIDATE;
     use crate::data::request::test_util::{
         INSERT, MASS_HEARTBEAT, REQUEST_VOTES, TICK, VOTE_NO_RESPONSE, VOTE_YES_RESPONSE,
     };
@@ -134,11 +129,6 @@ mod tests {
     use crate::state::concrete::leader::test_util::BASE_LEADER;
     use crate::state::state::test_util::TestCase;
     use crate::state::state::State;
-    
-
-    // Note this useful idiom: importing names from outer (for mod tests) scope.
-    use super::test_util::BASE_CANDIDATE;
-    
 
     #[test]
     fn test_tick() {

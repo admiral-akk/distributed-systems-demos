@@ -199,9 +199,8 @@ impl EventHandler for Leader {
 
 #[cfg(test)]
 pub mod test_util {
-    use crate::state::raft_state::RaftState;
-
     use super::Leader;
+    use crate::state::raft_state::RaftState;
 
     pub fn BASE_LEADER(log_length: usize, match_index: usize) -> RaftState {
         RaftState::Leader(super::Leader {
@@ -240,20 +239,13 @@ pub mod test_util {
 
 #[cfg(test)]
 mod tests {
-    
-
-    use crate::data::persistent_state::test_util::{LOG_WITH_CLIENT};
-    
+    use crate::data::persistent_state::test_util::LOG_WITH_CLIENT;
     use crate::data::request::test_util::{
         CLIENT_COMMAND, INSERT_FAILED_RESPONSE, INSERT_SUCCESS_RESPONSE, MASS_HEARTBEAT, TICK,
     };
-    
     use crate::state::concrete::leader::test_util::BASE_LEADER;
     use crate::state::state::test_util::TestCase;
     use crate::state::state::State;
-    
-    // Note this useful idiom: importing names from outer (for mod tests) scope.
-    
 
     #[test]
     fn test_tick() {
