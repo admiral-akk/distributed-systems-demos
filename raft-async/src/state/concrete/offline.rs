@@ -60,7 +60,9 @@ mod tests {
 
     use crate::data::persistent_state::test_util::PERSISTENT_STATE;
     use crate::data::request::test_util::TICK;
-    use crate::data::volitile_state::test_util::{VOLITILE_STATE, VOLITILE_STATE_TIMEOUT};
+    use crate::data::volitile_state::test_util::{
+        FRESH_VOLITILE_STATE, VOLITILE_STATE, VOLITILE_STATE_TIMEOUT,
+    };
     use crate::state::concrete::offline::test_util::OFFLINE;
     use crate::test_util::STATE_MACHINE;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -87,13 +89,9 @@ mod tests {
         } else {
             panic!("Didn't transition to offline!");
         }
-        assert!(requests.is_empty());
-        assert_eq!(persistent_state.voted_for, None);
-        assert_eq!(volitile_state.tick_since_start, 1);
-        assert_eq!(
-            volitile_state.get_commit_index(),
-            VOLITILE_STATE.get_commit_index()
-        );
+        assert_eq!(requests, []);
+        assert_eq!(persistent_state, PERSISTENT_STATE());
+        assert_eq!(volitile_state, VOLITILE_STATE.increment_tick());
     }
 
     #[test]
@@ -117,9 +115,8 @@ mod tests {
         } else {
             panic!("Didn't transition to follower!");
         }
-        assert!(requests.is_empty());
-        assert_eq!(persistent_state.voted_for, None);
-        assert_eq!(volitile_state.tick_since_start, 0);
-        assert_eq!(volitile_state.get_commit_index(), 0);
+        assert_eq!(requests, []);
+        assert_eq!(persistent_state, PERSISTENT_STATE());
+        assert_eq!(volitile_state, FRESH_VOLITILE_STATE);
     }
 }

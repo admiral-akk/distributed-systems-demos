@@ -5,7 +5,7 @@ use super::{
     request::{ActiveConfig, Data, Event, Insert, Vote},
 };
 
-#[derive(Default, Clone, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct Config {
     pub servers: HashSet<u32>,
 }
@@ -16,7 +16,7 @@ impl Config {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Entry<T: Clone> {
     pub term: u32,
     pub data: Data<T>,
@@ -38,7 +38,7 @@ impl<T: Clone> Entry<T> {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug, PartialEq)]
 pub struct PersistentState<T: Clone> {
     pub id: u32,
     pub current_term: u32,
@@ -46,7 +46,7 @@ pub struct PersistentState<T: Clone> {
     pub log: Vec<Entry<T>>,
 }
 
-#[derive(PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct LogState {
     pub term: u32,
     pub length: usize,
@@ -198,6 +198,14 @@ pub mod test_util {
         Config {
             servers: [0, 1, 2, 3, 4].into(),
         }
+    }
+    pub fn LOG_LEADER() -> Vec<Entry<u32>> {
+        Vec::from([
+            Entry::config(0, CONFIG()),
+            Entry::command(1, 10),
+            Entry::command(3, 4),
+            Entry::command(3, 5),
+        ])
     }
 
     pub fn LOG() -> Vec<Entry<u32>> {

@@ -2,7 +2,7 @@ use crate::state::state::StateMachine;
 
 use super::{data_type::CommandType, persistent_state::PersistentState, request::Data};
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Debug, PartialEq, Copy)]
 pub struct VolitileState {
     pub commit_index: usize,
     pub tick_since_start: u32,
@@ -38,6 +38,17 @@ impl VolitileState {
 #[cfg(test)]
 pub mod test_util {
     use super::VolitileState;
+
+    impl VolitileState {
+        pub fn increment_tick(mut self) -> Self {
+            self.tick_since_start += 1;
+            self
+        }
+    }
+    pub const FRESH_VOLITILE_STATE: VolitileState = VolitileState {
+        commit_index: 0,
+        tick_since_start: 0,
+    };
 
     pub const VOLITILE_STATE: VolitileState = VolitileState {
         commit_index: 2,

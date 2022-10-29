@@ -7,6 +7,7 @@ use super::{
     persistent_state::{Config, Entry, LogState},
 };
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct Request<T: CommandType, Output> {
     // Todo: figure out better framing for sender/reciever/term, since it's not relevant to all events.
     pub sender: u32,
@@ -21,7 +22,7 @@ impl<T: CommandType + Send, Output: Debug + Send + 'static> Message for Request<
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ActiveConfig {
     Stable(Config),
     Transition { prev: Config, new: Config },
@@ -47,11 +48,12 @@ impl ActiveConfig {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Data<T> {
     Command(T),
     Config(ActiveConfig),
 }
+#[derive(Clone, Debug, PartialEq)]
 pub enum Event<T: CommandType, Output> {
     Insert(Insert<T>),
     InsertResponse(InsertResponse),
@@ -62,10 +64,13 @@ pub enum Event<T: CommandType, Output> {
     Client(Client<T>),
     ClientResponse(ClientResponse<T, Output>),
 }
+#[derive(Clone, Debug, PartialEq)]
 pub struct Crash;
+#[derive(Clone, Debug, PartialEq)]
 pub struct Client<T: CommandType> {
     pub data: Data<T>,
 }
+#[derive(Clone, Debug, PartialEq)]
 
 pub enum ClientResponse<T: CommandType, Output> {
     Failed {
@@ -77,6 +82,7 @@ pub enum ClientResponse<T: CommandType, Output> {
     },
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct Insert<T: CommandType> {
     pub prev_log_state: LogState,
     pub entries: Vec<Entry<T>>,
@@ -89,22 +95,38 @@ impl<T: CommandType> Insert<T> {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct InsertResponse {
     pub success: bool,
 }
+#[derive(Clone, Debug, PartialEq)]
 pub struct Vote {
     pub log_state: LogState,
 }
+#[derive(Clone, Debug, PartialEq)]
 pub struct VoteResponse {
     pub success: bool,
 }
+#[derive(Clone, Debug, PartialEq)]
 pub struct Tick;
 
 #[cfg(test)]
 pub mod test_util {
-    use crate::data::persistent_state::{Entry, LogState};
+    use crate::data::{
+        data_type::CommandType,
+        persistent_state::{test_util::LOG_LEADER, LogState},
+    };
 
     use super::{Crash, Event, Insert, InsertResponse, Request, Tick, Vote, VoteResponse};
+
+    impl<In: CommandType, Out> Request<In, Out> {
+        pub fn reverse_sender(mut self) -> Self {
+            let reciever = self.sender;
+            self.sender = self.reciever;
+            self.reciever = reciever;
+            self
+        }
+    }
 
     pub const CRASH: Request<u32, u32> = Request {
         term: 0,
@@ -119,6 +141,7 @@ pub mod test_util {
         reciever: 0,
         event: Event::Tick(Tick),
     };
+
     pub const VOTE: Request<u32, u32> = Request {
         term: 4,
         sender: 0,
@@ -135,6 +158,13 @@ pub mod test_util {
         event: Event::VoteResponse(VoteResponse { success: false }),
     };
 
+    pub const VOTE_YES_RESPONSE: Request<u32, u32> = Request {
+        term: 4,
+        sender: 0,
+        reciever: 1,
+        event: Event::VoteResponse(VoteResponse { success: false }),
+    };
+
     pub const INSERT_SUCCESS_RESPONSE: Request<u32, u32> = Request {
         term: 4,
         sender: 0,
@@ -142,24 +172,23 @@ pub mod test_util {
         event: Event::InsertResponse(InsertResponse { success: true }),
     };
 
-    pub const INSERT_FAILED_RESPONSE: Request<u32, u32> = Request {
-        term: 4,
-        sender: 0,
-        reciever: 1,
-        event: Event::InsertResponse(InsertResponse { success: false }),
-    };
-    pub fn INSERT() -> Request<u32, u32> {
+    pub fn INSERT(index: usize) -> Request<u32, u32> {
+        let log = LOG_LEADER();
         Request {
             term: 4,
             sender: 0,
             reciever: 1,
             event: Event::Insert(Insert {
-                prev_log_state: LogState { term: 2, length: 3 },
-                entries: [Entry::command(3, 5)].into(),
+                prev_log_state: LogState {
+                    term: log[index].term,
+                    length: index,
+                },
+                entries: log[index..(index + 1)].into(),
                 leader_commit: 4,
             }),
         }
     }
+
     pub const INSERT_HEARTBEAT: Request<u32, u32> = Request {
         term: 4,
         sender: 0,
@@ -169,5 +198,12 @@ pub mod test_util {
             entries: Vec::new(),
             leader_commit: 3,
         }),
+    };
+
+    pub const INSERT_FAILED_RESPONSE: Request<u32, u32> = Request {
+        term: 4,
+        sender: 0,
+        reciever: 1,
+        event: Event::InsertResponse(InsertResponse { success: false }),
     };
 }

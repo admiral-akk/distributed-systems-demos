@@ -101,14 +101,27 @@ impl EventHandler for Follower {
         }
     }
 }
+#[cfg(test)]
+pub mod test_util {
+    use crate::state::raft_state::RaftState;
+
+    use super::Follower;
+
+    pub const FOLLOWER: RaftState = RaftState::Follower(Follower);
+}
 
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
 
+    use crate::data::persistent_state::test_util::PERSISTENT_STATE;
     use crate::data::persistent_state::{Config, Entry, LogState};
+    use crate::data::request::test_util::{INSERT, INSERT_FAILED_RESPONSE, TICK, VOTE_NO_RESPONSE};
     use crate::data::request::{self, Data};
+    use crate::data::volitile_state::test_util::{VOLITILE_STATE, VOLITILE_STATE_TIMEOUT};
+    use crate::state::concrete::follower::test_util::FOLLOWER;
     use crate::state::concrete::follower::Follower;
+    use crate::test_util::STATE_MACHINE;
     use crate::Sum;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
@@ -139,22 +152,22 @@ mod tests {
 
     #[test]
     fn test_tick() {
-        let (mut follower, mut volitile_state, mut persistent_state, mut state_machine) = setup();
-        let request: Request<u32, u32> = Request {
-            sender: 10,
-            reciever: 1,
-            term: 0,
-            event: Event::Tick(request::Tick),
-        };
+        let (mut state, mut volitile_state, mut persistent_state, mut state_machine, request) = (
+            FOLLOWER,
+            VOLITILE_STATE,
+            PERSISTENT_STATE(),
+            STATE_MACHINE(),
+            TICK,
+        );
 
-        let (requests, next) = follower.handle_request(
+        let (requests, state) = state.handle_request(
+            request,
             &mut volitile_state,
             &mut persistent_state,
             &mut state_machine,
-            request,
         );
 
-        if let RaftState::Follower(_) = next {
+        if let RaftState::Follower(_) = state {
         } else {
             panic!("Didn't transition to follower!");
         }
@@ -164,91 +177,52 @@ mod tests {
 
     #[test]
     fn test_timeout() {
-        let (mut follower, mut volitile_state, mut persistent_state, mut state_machine) = setup();
-        let request: Request<u32, u32> = Request {
-            sender: 10,
-            reciever: 1,
-            term: 0,
-            event: Event::Tick(request::Tick),
-        };
-        volitile_state.tick_since_start = 10000;
+        let (mut state, mut volitile_state, mut persistent_state, mut state_machine, request) = (
+            FOLLOWER,
+            VOLITILE_STATE_TIMEOUT,
+            PERSISTENT_STATE(),
+            STATE_MACHINE(),
+            TICK,
+        );
 
-        let (requests, next) = follower.handle_request(
+        let (_, state) = state.handle_request(
+            request,
             &mut volitile_state,
             &mut persistent_state,
             &mut state_machine,
-            request,
         );
 
-        if let RaftState::Candidate(_) = next {
-            assert!(persistent_state.current_term == 4);
+        if let RaftState::Candidate(_) = state {
         } else {
-            panic!("Didn't transition to candidate!");
-        }
-        assert!(requests.len() == 4);
-        assert_eq!(volitile_state.tick_since_start, 0);
-        for request in requests {
-            assert!(request.sender == persistent_state.id);
-            assert!(request.term == persistent_state.current_term);
-            match request.event {
-                Event::Vote(event) => {
-                    assert!(event.log_state.term == 2);
-                    assert!(event.log_state.length == 3);
-                }
-                _ => {
-                    panic!("Non-vote event!")
-                }
-            }
+            panic!("Didn't start election!");
         }
     }
 
     #[test]
     fn test_append_old_leader() {
-        let (mut follower, mut volitile_state, mut persistent_state, mut state_machine) = setup();
-        let request: Request<u32, u32> = Request {
-            sender: 0,
-            reciever: 1,
-            term: 2,
-            event: Event::Insert(request::Insert {
-                prev_log_state: LogState { term: 2, length: 2 },
-                entries: Vec::from([Entry::command(3, 5)]),
-                leader_commit: 2,
-            }),
-        };
-        volitile_state.tick_since_start = 0;
+        let (mut state, mut volitile_state, mut persistent_state, mut state_machine, mut request) = (
+            FOLLOWER,
+            VOLITILE_STATE,
+            PERSISTENT_STATE(),
+            STATE_MACHINE(),
+            INSERT(1),
+        );
+        request.term = 2;
 
-        let (requests, next) = follower.handle_request(
+        let (requests, state) = state.handle_request(
+            request,
             &mut volitile_state,
             &mut persistent_state,
             &mut state_machine,
-            request,
         );
 
-        if let RaftState::Follower(_) = next {
+        if let RaftState::Follower(_) = state {
         } else {
-            panic!("Didn't transition to follower!");
+            panic!("Didn't remain a follower!");
         }
-        assert!(requests.len() == 1);
-        assert!(persistent_state.current_term == 3);
-        assert_eq!(volitile_state.tick_since_start, 0);
-        assert!(
-            persistent_state.voted_for == None,
-            "Follower should not redirect to this leader."
-        );
-        for request in requests {
-            assert!(request.sender == persistent_state.id);
-            assert!(request.reciever == 0);
-            assert!(request.term == persistent_state.current_term);
-            match request.event {
-                Event::InsertResponse(event) => {
-                    assert!(!event.success);
-                }
-                _ => {
-                    panic!("Non-append response!");
-                }
-            }
-        }
-        assert!(volitile_state.get_commit_index() == 0);
+        assert_eq!(persistent_state, PERSISTENT_STATE());
+        assert_eq!(volitile_state, VOLITILE_STATE);
+        assert_eq!(requests, [INSERT_FAILED_RESPONSE.reverse_sender()]);
     }
 
     #[test]
