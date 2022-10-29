@@ -188,3 +188,50 @@ impl<T: CommandType> PersistentState<T> {
             .collect()
     }
 }
+
+#[cfg(test)]
+pub mod test_util {
+
+    use super::{Config, Entry, PersistentState};
+
+    pub fn CONFIG() -> Config {
+        Config {
+            servers: [0, 1, 2, 3, 4].into(),
+        }
+    }
+
+    pub fn LOG() -> Vec<Entry<u32>> {
+        Vec::from([
+            Entry::config(0, CONFIG()),
+            Entry::command(1, 10),
+            Entry::command(3, 4),
+        ])
+    }
+
+    pub fn PERSISTENT_STATE() -> PersistentState<u32> {
+        PersistentState {
+            id: 1,
+            current_term: 4,
+            voted_for: None,
+            log: LOG(),
+        }
+    }
+
+    pub fn PERSISTENT_STATE_LOG(log: Vec<Entry<u32>>) -> PersistentState<u32> {
+        PersistentState {
+            id: 1,
+            current_term: 4,
+            voted_for: None,
+            log,
+        }
+    }
+
+    pub fn PERSISTENT_STATE_VOTED(id: u32) -> PersistentState<u32> {
+        PersistentState {
+            id: 1,
+            current_term: 4,
+            voted_for: Some(id),
+            log: LOG(),
+        }
+    }
+}

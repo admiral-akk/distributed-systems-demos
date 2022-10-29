@@ -52,7 +52,7 @@ mod tests {
     use std::collections::HashSet;
 
     use crate::data::persistent_state::{Config, Entry};
-    use crate::data::request::{self, Event};
+    use crate::data::request::{self, test_util, Event};
     use crate::Sum;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
@@ -77,12 +77,7 @@ mod tests {
             tick_since_start: 0,
         };
         let follower = Offline {};
-        let request: Request<u32, u32> = Request {
-            sender: 10,
-            reciever: persistent_state.id,
-            term: 0,
-            event: Event::Tick(request::Tick),
-        };
+        let request: Request<u32, u32> = test_util::TICK;
         let mut state_machine = Sum::default();
 
         let (requests, next) = follower.handle_request(

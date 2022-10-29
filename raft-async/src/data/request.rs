@@ -99,3 +99,75 @@ pub struct VoteResponse {
     pub success: bool,
 }
 pub struct Tick;
+
+#[cfg(test)]
+pub mod test_util {
+    use crate::data::persistent_state::{Entry, LogState};
+
+    use super::{Crash, Event, Insert, InsertResponse, Request, Tick, Vote, VoteResponse};
+
+    pub const CRASH: Request<u32, u32> = Request {
+        term: 0,
+        sender: 0,
+        reciever: 0,
+        event: Event::Crash(Crash),
+    };
+
+    pub const TICK: Request<u32, u32> = Request {
+        term: 0,
+        sender: 0,
+        reciever: 0,
+        event: Event::Tick(Tick),
+    };
+    pub const VOTE: Request<u32, u32> = Request {
+        term: 4,
+        sender: 0,
+        reciever: 1,
+        event: Event::Vote(Vote {
+            log_state: LogState { term: 2, length: 3 },
+        }),
+    };
+
+    pub const VOTE_NO_RESPONSE: Request<u32, u32> = Request {
+        term: 4,
+        sender: 0,
+        reciever: 1,
+        event: Event::VoteResponse(VoteResponse { success: false }),
+    };
+
+    pub const INSERT_SUCCESS_RESPONSE: Request<u32, u32> = Request {
+        term: 4,
+        sender: 0,
+        reciever: 1,
+        event: Event::InsertResponse(InsertResponse { success: true }),
+    };
+
+    pub const INSERT_FAILED_RESPONSE: Request<u32, u32> = Request {
+        term: 4,
+        sender: 0,
+        reciever: 1,
+        event: Event::InsertResponse(InsertResponse { success: false }),
+    };
+    pub fn INSERT() -> Request<u32, u32> {
+        Request {
+            term: 4,
+            sender: 0,
+            reciever: 1,
+            event: Event::Insert(Insert {
+                prev_log_state: LogState { term: 2, length: 3 },
+                entries: [Entry::command(3, 5)].into(),
+                leader_commit: 4,
+            }),
+        }
+    }
+    pub const INSERT_HEARTBEAT: Request<u32, u32> = Request {
+        term: 4,
+        sender: 0,
+        reciever: 1,
+        event: Event::Insert(Insert {
+            prev_log_state: LogState { term: 2, length: 3 },
+            entries: Vec::new(),
+            leader_commit: 3,
+        }),
+    };
+}

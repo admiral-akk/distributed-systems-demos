@@ -34,3 +34,18 @@ impl VolitileState {
         true
     }
 }
+
+#[cfg(test)]
+pub mod test_util {
+    use super::VolitileState;
+
+    pub const VOLITILE_STATE: VolitileState = VolitileState {
+        commit_index: 2,
+        tick_since_start: 0,
+    };
+
+    pub const VOLITILE_STATE_TIMEOUT: VolitileState = VolitileState {
+        commit_index: 2,
+        tick_since_start: 100000,
+    };
+}
