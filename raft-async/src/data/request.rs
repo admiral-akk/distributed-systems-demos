@@ -114,10 +114,13 @@ pub struct Tick;
 pub mod test_util {
     use crate::data::{
         data_type::CommandType,
-        persistent_state::{test_util::LOG_LEADER, LogState},
+        persistent_state::{test_util::LOG_LEADER, Config, LogState},
     };
 
-    use super::{Crash, Event, Insert, InsertResponse, Request, Tick, Vote, VoteResponse};
+    use super::{
+        ActiveConfig, Client, Crash, Data, Event, Insert, InsertResponse, Request, Tick, Vote,
+        VoteResponse,
+    };
 
     impl<In: CommandType, Out> Request<In, Out> {
         pub fn reverse_sender(mut self) -> Self {
@@ -253,4 +256,46 @@ pub mod test_util {
         reciever: 1,
         event: Event::InsertResponse(InsertResponse { success: false }),
     };
+
+    pub const CLIENT_COMMAND: Request<u32, u32> = Request {
+        term: 0,
+        sender: 100,
+        reciever: 1,
+        event: Event::Client(Client {
+            data: Data::Command(100),
+        }),
+    };
+
+    pub const CLIENT_RESPONSE_NO_LEADER: Request<u32, u32> = Request {
+        term: 0,
+        sender: 1,
+        reciever: 100,
+        event: Event::ClientResponse(super::ClientResponse::Failed {
+            leader_id: None,
+            data: Data::Command(100),
+        }),
+    };
+
+    pub const CLIENT_RESPONSE_WITH_LEADER: Request<u32, u32> = Request {
+        term: 0,
+        sender: 1,
+        reciever: 100,
+        event: Event::ClientResponse(super::ClientResponse::Failed {
+            leader_id: Some(0),
+            data: Data::Command(100),
+        }),
+    };
+
+    pub fn CLIENT_CONFIG() -> Request<u32, u32> {
+        Request {
+            term: 0,
+            sender: 100,
+            reciever: 1,
+            event: Event::Client(Client {
+                data: Data::Config(ActiveConfig::Stable(Config {
+                    servers: [2, 3, 4, 5, 6].into(),
+                })),
+            }),
+        }
+    }
 }

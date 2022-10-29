@@ -102,6 +102,11 @@ pub mod test_util {
             }
         }
 
+        pub fn set_voted(mut self, voted_for: u32) -> Self {
+            self.persistent_state = self.persistent_state.set_voted(voted_for);
+            self
+        }
+
         pub fn set_rs(mut self, raft_state: RaftState) -> Self {
             self.raft_state = raft_state;
             self

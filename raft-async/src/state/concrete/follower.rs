@@ -120,8 +120,9 @@ mod tests {
     };
     use crate::data::persistent_state::{Config, Entry, LogState};
     use crate::data::request::test_util::{
-        INSERT, INSERT_FAILED_RESPONSE, INSERT_SUCCESS_RESPONSE, REQUEST_VOTES, TICK, VOTE,
-        VOTE_NEW_SHORT, VOTE_NO_RESPONSE, VOTE_OLD_EQUAL, VOTE_OLD_LONG, VOTE_YES_RESPONSE,
+        CLIENT_COMMAND, CLIENT_RESPONSE_NO_LEADER, CLIENT_RESPONSE_WITH_LEADER, INSERT,
+        INSERT_FAILED_RESPONSE, INSERT_SUCCESS_RESPONSE, REQUEST_VOTES, TICK, VOTE, VOTE_NEW_SHORT,
+        VOTE_NO_RESPONSE, VOTE_OLD_EQUAL, VOTE_OLD_LONG, VOTE_YES_RESPONSE,
     };
     use crate::data::request::{self, Data};
     use crate::data::volitile_state::test_util::{VOLITILE_STATE, VOLITILE_STATE_TIMEOUT};
@@ -248,130 +249,16 @@ mod tests {
 
     #[test]
     fn test_client_request() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2, 3, 4]),
-        };
-        let log = Vec::from([
-            Entry::config(0, config),
-            Entry::command(1, 10),
-            Entry::command(3, 4),
-        ]);
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 3,
-            log: log.clone(),
-            voted_for: Some(0),
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState {
-            commit_index: 1,
-            ..Default::default()
-        };
-        let request: Request<u32, u32> = Request {
-            sender: 10,
-            reciever: persistent_state.id,
-            term: 0,
-            event: Event::Client(request::Client {
-                data: Data::Command(2),
-            }),
-        };
-
-        let follower = Follower {};
-
-        let mut state_machine = Sum::default();
-
-        let (requests, next) = follower.handle_request(
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-            request,
-        );
-
-        if let RaftState::Follower(_) = next {
-        } else {
-            panic!("Didn't transition to follower!");
-        }
-        assert_eq!(requests.len(), 1);
-        for request in requests {
-            assert_eq!(request.sender, persistent_state.id);
-            assert_eq!(request.reciever, 10);
-            assert_eq!(request.term, 0);
-            match request.event {
-                Event::ClientResponse(ClientResponse::Failed {
-                    leader_id: Some(leader_id),
-                    data: Data::Command(data),
-                }) => {
-                    assert_eq!(data, 2);
-                    assert_eq!(leader_id, 0);
-                }
-                _ => {
-                    panic!("Invalid client response!");
-                }
-            }
-        }
+        let state = State::create_state(FOLLOWER).set_voted(0);
+        let mut test_case =
+            TestCase::new(state, CLIENT_COMMAND).responses(&[CLIENT_RESPONSE_WITH_LEADER]);
+        test_case.run();
     }
     #[test]
     fn test_client_request_no_leader() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2, 3, 4]),
-        };
-        let log = Vec::from([
-            Entry::config(0, config),
-            Entry::command(1, 10),
-            Entry::command(3, 4),
-        ]);
-
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 3,
-            log: log.clone(),
-            voted_for: None,
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState {
-            commit_index: 1,
-            ..Default::default()
-        };
-        let request: Request<u32, u32> = Request {
-            sender: 10,
-            reciever: persistent_state.id,
-            term: 0,
-            event: Event::Client(request::Client {
-                data: Data::Command(2),
-            }),
-        };
-
-        let follower = Follower {};
-
-        let mut state_machine = Sum::default();
-
-        let (requests, next) = follower.handle_request(
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-            request,
-        );
-
-        if let RaftState::Follower(_) = next {
-        } else {
-            panic!("Didn't transition to follower!");
-        }
-        assert_eq!(requests.len(), 1);
-        for request in requests {
-            assert_eq!(request.sender, persistent_state.id);
-            assert_eq!(request.reciever, 10);
-            assert_eq!(request.term, 0);
-            match request.event {
-                Event::ClientResponse(ClientResponse::Failed {
-                    leader_id: None,
-                    data: Data::Command(data),
-                }) => {
-                    assert_eq!(data, 2);
-                }
-                _ => {
-                    panic!("Invalid client response!");
-                }
-            }
-        }
+        let state = State::create_state(FOLLOWER);
+        let mut test_case =
+            TestCase::new(state, CLIENT_COMMAND).responses(&[CLIENT_RESPONSE_NO_LEADER]);
+        test_case.run();
     }
 }
