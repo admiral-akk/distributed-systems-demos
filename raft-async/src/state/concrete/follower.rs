@@ -126,7 +126,7 @@ mod tests {
     };
     use crate::data::request::{self, Data};
     use crate::data::volitile_state::test_util::{VOLITILE_STATE, VOLITILE_STATE_TIMEOUT};
-    use crate::state::concrete::candidate::test_util::CANDIDATE;
+    use crate::state::concrete::candidate::test_util::{BASE_CANDIDATE, CANDIDATE};
     use crate::state::concrete::follower::test_util::FOLLOWER;
     use crate::state::concrete::follower::Follower;
     use crate::state::state::test_util::TestCase;
@@ -148,7 +148,7 @@ mod tests {
         let state = State::create_state(FOLLOWER).set_vs(VOLITILE_STATE_TIMEOUT);
 
         let mut test_case = TestCase::new(state, TICK)
-            .set_rs(CANDIDATE())
+            .set_rs(BASE_CANDIDATE())
             .set_vs(VOLITILE_STATE)
             .set_ps(PERSISTENT_STATE().increment_term().set_voted(1))
             .responses(&REQUEST_VOTES(5));

@@ -198,6 +198,21 @@ impl EventHandler for Leader {
 }
 
 #[cfg(test)]
+pub mod test_util {
+    use crate::state::raft_state::RaftState;
+
+    pub fn BASE_LEADER(log_length: usize) -> RaftState {
+        RaftState::Leader(super::Leader {
+            next_index: (0..5)
+                .filter(|id| *id != 1)
+                .map(|id| (id, log_length))
+                .collect(),
+            match_index: (0..5).filter(|id| *id != 1).map(|id| (id, 0)).collect(),
+        })
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use std::collections::HashSet;
 

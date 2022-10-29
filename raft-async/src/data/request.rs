@@ -239,6 +239,18 @@ pub mod test_util {
         }
     }
 
+    pub fn MASS_HEARTBEAT(term: u32) -> Vec<Request<u32, u32>> {
+        let request = INSERT_HEARTBEAT.reverse_sender().set_term(term);
+        (0..5)
+            .filter(|id| !request.sender.eq(id))
+            .map(|id| {
+                let mut request = request.clone();
+                request.reciever = id;
+                request
+            })
+            .collect()
+    }
+
     pub const INSERT_HEARTBEAT: Request<u32, u32> = Request {
         term: 4,
         sender: 0,
@@ -246,7 +258,7 @@ pub mod test_util {
         event: Event::Insert(Insert {
             prev_log_state: LogState { term: 3, length: 3 },
             entries: Vec::new(),
-            leader_commit: 3,
+            leader_commit: 2,
         }),
     };
 

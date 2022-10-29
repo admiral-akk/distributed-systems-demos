@@ -94,18 +94,28 @@ impl Candidate {
         volitile_state.tick_since_start = 0;
         (
             Candidate::request_votes(persistent_state),
-            Candidate::default().into(),
+            Candidate {
+                votes: [persistent_state.id].into(),
+            }
+            .into(),
         )
     }
 }
 #[cfg(test)]
 pub mod test_util {
+
     use crate::state::raft_state::RaftState;
 
     use super::Candidate;
 
-    pub fn CANDIDATE() -> RaftState {
-        RaftState::Candidate(Candidate::default())
+    pub fn BASE_CANDIDATE() -> RaftState {
+        RaftState::Candidate(Candidate { votes: [1].into() })
+    }
+
+    pub fn CANDIDATE(votes: &[u32]) -> RaftState {
+        RaftState::Candidate(Candidate {
+            votes: votes.iter().map(|id| *id).collect(),
+        })
     }
 }
 
@@ -115,403 +125,86 @@ mod tests {
 
     use crate::data::persistent_state::{Config, Entry};
     use crate::data::request;
+    use crate::data::request::test_util::{
+        INSERT, MASS_HEARTBEAT, REQUEST_VOTES, TICK, VOTE_NO_RESPONSE, VOTE_YES_RESPONSE,
+    };
+    use crate::data::volitile_state::test_util::{VOLITILE_STATE, VOLITILE_STATE_TIMEOUT};
+    use crate::state::concrete::candidate::test_util::CANDIDATE;
+    use crate::state::concrete::follower::test_util::FOLLOWER;
+    use crate::state::concrete::leader::test_util::BASE_LEADER;
+    use crate::state::state::test_util::TestCase;
+    use crate::state::state::State;
     use crate::Sum;
 
     // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::test_util::BASE_CANDIDATE;
     use super::*;
 
     #[test]
     fn test_tick() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2]),
-        };
-        let log = Vec::from([
-            Entry::config(0, config),
-            Entry::command(1, 10),
-            Entry::command(3, 4),
-        ]);
-
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 3,
-            log,
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState::default();
-        let candidate = Candidate {
-            ..Default::default()
-        };
-        let request: Request<u32, u32> = Request {
-            sender: 0,
-            reciever: persistent_state.id,
-            term: 0,
-            event: Event::Tick(request::Tick),
-        };
-        let mut state_machine = Sum::default();
-
-        let (requests, next) = candidate.handle_request(
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-            request,
-        );
-
-        if let RaftState::Candidate(_) = next {
-        } else {
-            panic!("Didn't transition to candidate!");
-        }
-        assert!(requests.len() == 2);
-        assert_eq!(volitile_state.tick_since_start, 1);
-        for request in requests {
-            assert!(request.sender == persistent_state.id);
-            assert!(request.term == persistent_state.current_term);
-            match request.event {
-                Event::Vote(event) => {
-                    assert!(event.log_state.term == 3);
-                    assert!(event.log_state.length == 3);
-                }
-                _ => {
-                    panic!("Non-vote event!")
-                }
-            }
-        }
+        let state = State::create_state(BASE_CANDIDATE()).set_voted(1);
+        let mut test_case = TestCase::new(state, TICK)
+            .set_vs(VOLITILE_STATE.increment_tick())
+            .responses(&REQUEST_VOTES(4));
+        test_case.run();
     }
 
     #[test]
     fn test_timeout() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2, 3, 4]),
-        };
-        let log = Vec::from([
-            Entry::config(0, config),
-            Entry::command(1, 10),
-            Entry::command(3, 4),
-        ]);
-
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 3,
-            log,
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState {
-            commit_index: 0,
-            tick_since_start: 100000,
-        };
-        let candidate = Candidate {
-            ..Default::default()
-        };
-        let request: Request<u32, u32> = Request {
-            sender: 0,
-            reciever: persistent_state.id,
-            term: 0,
-            event: Event::Tick(request::Tick),
-        };
-        let mut state_machine = Sum::default();
-
-        let (requests, next) = candidate.handle_request(
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-            request,
-        );
-
-        assert_eq!(volitile_state.tick_since_start, 0);
-        if let RaftState::Candidate(Candidate { votes }) = next {
-            assert!(votes.is_empty());
-            assert!(persistent_state.current_term == 4);
-        } else {
-            panic!("Transitioned to non-candidate!");
-        }
-
-        assert!(requests.len() == 4);
-        for request in requests {
-            assert!(request.sender == persistent_state.id);
-            assert!(request.term == persistent_state.current_term);
-            match request.event {
-                Event::Vote(event) => {
-                    assert!(event.log_state.term == 3);
-                    assert!(event.log_state.length == 3);
-                }
-                _ => {
-                    panic!("Non-vote event!")
-                }
-            }
-        }
+        let state = State::create_state(BASE_CANDIDATE())
+            .set_vs(VOLITILE_STATE_TIMEOUT)
+            .set_voted(1);
+        let mut test_case = TestCase::new(state, TICK)
+            .set_vs(VOLITILE_STATE)
+            .set_term(5)
+            .responses(&REQUEST_VOTES(5));
+        test_case.run();
     }
 
     #[test]
     fn test_request_vote_rejection() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2, 3, 4]),
-        };
-        let log = Vec::from([
-            Entry::config(0, config),
-            Entry::command(1, 10),
-            Entry::command(3, 4),
-        ]);
-
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 3,
-            log,
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState::default();
-        let candidate = Candidate {
-            ..Default::default()
-        };
-        let request: Request<u32, u32> = Request {
-            sender: 0,
-            reciever: persistent_state.id,
-            term: 0,
-            event: Event::VoteResponse(request::VoteResponse { success: false }),
-        };
-        let mut state_machine = Sum::default();
-
-        let (requests, next) = candidate.handle_request(
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-            request,
-        );
-
-        if let RaftState::Candidate(candidate) = next {
-            assert!(candidate.votes.len() == 0);
-        } else {
-            panic!("Didn't transition to candidate!");
-        }
-
-        assert!(requests.len() == 0);
+        let state = State::create_state(BASE_CANDIDATE()).set_voted(1);
+        let mut test_case = TestCase::new(state, VOTE_NO_RESPONSE);
+        test_case.run();
     }
 
     #[test]
     fn test_request_vote_successful() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2, 3, 4]),
-        };
-        let log = Vec::from([
-            Entry::config(0, config),
-            Entry::command(1, 10),
-            Entry::command(3, 4),
-        ]);
-
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 3,
-            log,
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState::default();
-        let candidate = Candidate {
-            ..Default::default()
-        };
-        let request: Request<u32, u32> = Request {
-            sender: 0,
-            reciever: persistent_state.id,
-            term: 0,
-            event: Event::VoteResponse(request::VoteResponse { success: true }),
-        };
-        let mut state_machine = Sum::default();
-
-        let (requests, next) = candidate.handle_request(
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-            request,
-        );
-
-        if let RaftState::Candidate(candidate) = next {
-            assert!(candidate.votes.eq(&HashSet::from([0])));
-        } else {
-            panic!("Didn't transition to candidate!");
-        }
-
-        assert!(requests.len() == 0);
+        let state = State::create_state(BASE_CANDIDATE()).set_voted(1);
+        let mut test_case = TestCase::new(state, VOTE_YES_RESPONSE).set_rs(CANDIDATE(&[0, 1]));
+        test_case.run();
     }
 
     #[test]
     fn test_request_vote_successful_redundant() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2, 3, 4]),
-        };
-        let log = Vec::from([
-            Entry::config(0, config),
-            Entry::command(1, 10),
-            Entry::command(3, 4),
-        ]);
-
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 3,
-            log,
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState::default();
-        let candidate = Candidate {
-            votes: HashSet::from([0]),
-        };
-        let request: Request<u32, u32> = Request {
-            sender: 0,
-            reciever: persistent_state.id,
-            term: 0,
-            event: Event::VoteResponse(request::VoteResponse { success: true }),
-        };
-        let mut state_machine = Sum::default();
-
-        let (requests, next) = candidate.handle_request(
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-            request,
-        );
-
-        if let RaftState::Candidate(candidate) = next {
-            assert!(candidate.votes.eq(&HashSet::from([0])));
-        } else {
-            panic!("Didn't transition to candidate!");
-        }
-
-        assert!(requests.len() == 0);
+        let state = State::create_state(CANDIDATE(&[0, 1])).set_voted(1);
+        let mut test_case = TestCase::new(state, VOTE_YES_RESPONSE);
+        test_case.run();
     }
 
     #[test]
     fn test_request_vote_successful_elected() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2, 3, 4]),
-        };
-        let log = Vec::from([
-            Entry::config(0, config),
-            Entry::command(1, 10),
-            Entry::command(3, 4),
-        ]);
-
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 3,
-            log,
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState::default();
-        let candidate = Candidate {
-            votes: HashSet::from([0, 1]),
-        };
-        let request: Request<u32, u32> = Request {
-            sender: 2,
-            reciever: persistent_state.id,
-            term: 0,
-            event: Event::VoteResponse(request::VoteResponse { success: true }),
-        };
-        let mut state_machine = Sum::default();
-
-        let (_requests, next) = candidate.handle_request(
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-            request,
-        );
-
-        // We can verify the elected Leader values in the leader tests.
-        if let RaftState::Leader(_) = next {
-        } else {
-            panic!("Didn't become a leader!");
-        }
-        assert_eq!(volitile_state.tick_since_start, 0);
+        let state = State::create_state(CANDIDATE(&[1, 2])).set_voted(1);
+        let mut test_case = TestCase::new(state, VOTE_YES_RESPONSE)
+            .set_rs(BASE_LEADER(3))
+            .set_term(5)
+            .responses(&MASS_HEARTBEAT(5));
+        test_case.run();
     }
 
     #[test]
     fn test_append_old_leader() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2, 3, 4]),
-        };
-        let log = Vec::from([
-            Entry::config(0, config),
-            Entry::command(1, 10),
-            Entry::command(3, 4),
-        ]);
-
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 4,
-            log: log.clone(),
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState::default();
-        let candidate = Candidate {
-            votes: HashSet::from([0]),
-        };
-        let entries = Vec::from([Entry::command(4, 5)]);
-        let request: Request<u32, u32> = Request {
-            sender: 0,
-            reciever: persistent_state.id,
-            term: 3,
-            event: Event::Insert(request::Insert {
-                prev_log_state: persistent_state.log_state(),
-                entries: entries.clone(),
-                leader_commit: 12,
-            }),
-        };
-        let mut state_machine = Sum::default();
-
-        let (_requests, next) = candidate.handle_request(
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-            request,
-        );
-        if let RaftState::Candidate(_) = next {
-        } else {
-            panic!("Failed to transition to follower");
-        }
-        assert!(persistent_state.log.iter().eq(log.iter()));
+        let state = State::create_state(CANDIDATE(&[1])).set_voted(1);
+        let mut test_case = TestCase::new(state, INSERT(4).set_term(2));
+        test_case.run();
     }
 
     #[test]
     fn test_append_current_leader() {
-        let config = Config {
-            servers: HashSet::from([0, 1, 2, 3, 4]),
-        };
-        let log = Vec::from([
-            Entry::config(0, config),
-            Entry::command(1, 10),
-            Entry::command(3, 4),
-        ]);
-        let mut persistent_state: PersistentState<u32> = PersistentState {
-            id: 1,
-            current_term: 4,
-            log: log.clone(),
-            ..Default::default()
-        };
-        let mut volitile_state = VolitileState::default();
-        let candidate = Candidate {
-            votes: HashSet::from([0]),
-        };
-        let entries = Vec::from([Entry::command(4, 5)]);
-        let request: Request<u32, u32> = Request {
-            sender: 0,
-            reciever: persistent_state.id,
-            term: 4,
-            event: Event::Insert(request::Insert {
-                prev_log_state: persistent_state.log_state(),
-                entries: entries.clone(),
-                leader_commit: 12,
-            }),
-        };
-        let mut state_machine = Sum::default();
-
-        let (_requests, next) = candidate.handle_request(
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-            request,
-        );
-
-        if let RaftState::Follower(_) = next {
-        } else {
-            panic!("Failed to transition to follower");
-        }
-        assert_eq!(volitile_state.tick_since_start, 0);
-        assert!(persistent_state.voted_for == Some(0));
-        assert!(persistent_state.log[0..2].iter().eq(log[0..2].iter()));
+        let state = State::create_state(CANDIDATE(&[1])).set_voted(1);
+        let mut test_case = TestCase::new(state, INSERT(4).set_term(4))
+            .set_rs(FOLLOWER)
+            .set_voted(0);
+        test_case.run();
     }
 }

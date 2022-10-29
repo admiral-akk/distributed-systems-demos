@@ -131,6 +131,11 @@ pub mod test_util {
             self
         }
 
+        pub fn set_term(mut self, term: u32) -> Self {
+            self.persistent_state.current_term = term;
+            self
+        }
+
         pub fn set_sum(mut self, total: u32) -> Self {
             self.state_machine.total = total;
             self
@@ -186,6 +191,11 @@ pub mod test_util {
 
         pub fn set_sum(mut self, total: u32) -> Self {
             self.expected_state = self.expected_state.set_sum(total);
+            self
+        }
+
+        pub fn set_term(mut self, term: u32) -> Self {
+            self.expected_state = self.expected_state.set_term(term);
             self
         }
 
