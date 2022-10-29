@@ -7,7 +7,7 @@ use super::{
     persistent_state::{Config, Entry, LogState},
 };
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Request<T: CommandType, Output> {
     // Todo: figure out better framing for sender/reciever/term, since it's not relevant to all events.
     pub sender: u32,
@@ -22,7 +22,7 @@ impl<T: CommandType + Send, Output: Debug + Send + 'static> Message for Request<
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ActiveConfig {
     Stable(Config),
     Transition { prev: Config, new: Config },
@@ -48,12 +48,12 @@ impl ActiveConfig {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Data<T> {
     Command(T),
     Config(ActiveConfig),
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Event<T: CommandType, Output> {
     Insert(Insert<T>),
     InsertResponse(InsertResponse),
@@ -64,13 +64,13 @@ pub enum Event<T: CommandType, Output> {
     Client(Client<T>),
     ClientResponse(ClientResponse<T, Output>),
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Crash;
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Client<T: CommandType> {
     pub data: Data<T>,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 
 pub enum ClientResponse<T: CommandType, Output> {
     Failed {
@@ -82,7 +82,7 @@ pub enum ClientResponse<T: CommandType, Output> {
     },
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Insert<T: CommandType> {
     pub prev_log_state: LogState,
     pub entries: Vec<Entry<T>>,
@@ -95,19 +95,19 @@ impl<T: CommandType> Insert<T> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InsertResponse {
     pub success: bool,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Vote {
     pub log_state: LogState,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VoteResponse {
     pub success: bool,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Tick;
 
 #[cfg(test)]
@@ -126,7 +126,14 @@ pub mod test_util {
             self.reciever = reciever;
             self
         }
+
+        pub fn set_term(mut self, term: u32) -> Self {
+            self.term = term;
+            self
+        }
     }
+
+    impl<In: CommandType> Insert<In> {}
 
     pub const CRASH: Request<u32, u32> = Request {
         term: 0,
@@ -174,16 +181,17 @@ pub mod test_util {
 
     pub fn INSERT(index: usize) -> Request<u32, u32> {
         let log = LOG_LEADER();
+        let max_index = index.min(log.len() - 1);
         Request {
             term: 4,
             sender: 0,
             reciever: 1,
             event: Event::Insert(Insert {
                 prev_log_state: LogState {
-                    term: log[index].term,
+                    term: log[max_index].term,
                     length: index,
                 },
-                entries: log[index..(index + 1)].into(),
+                entries: log[max_index..(max_index + 1)].into(),
                 leader_commit: 4,
             }),
         }

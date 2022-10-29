@@ -19,6 +19,7 @@ use crate::{
 
 use super::{candidate::Candidate, follower::Follower};
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct Leader {
     pub next_index: HashMap<u32, usize>,
     pub match_index: HashMap<u32, usize>,

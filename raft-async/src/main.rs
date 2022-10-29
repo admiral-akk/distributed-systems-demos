@@ -5,14 +5,14 @@ use async_std::sync::Arc;
 use async_std::task;
 use data::{persistent_state::Config, request::Request};
 use rand::Rng;
-use server::{client::Client, cluster::RaftCluster, server::Server};
+use server::{client::Client, cluster::RaftCluster};
 use state::state::StateMachine;
 
 mod data;
 mod server;
 mod state;
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Eq, Clone, PartialEq)]
 pub struct Sum {
     total: u32,
 }

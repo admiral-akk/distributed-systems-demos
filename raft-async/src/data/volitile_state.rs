@@ -44,6 +44,11 @@ pub mod test_util {
             self.tick_since_start += 1;
             self
         }
+
+        pub fn set_commit(mut self, commit_index: usize) -> Self {
+            self.commit_index = commit_index;
+            self
+        }
     }
     pub const FRESH_VOLITILE_STATE: VolitileState = VolitileState {
         commit_index: 0,

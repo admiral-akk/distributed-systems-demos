@@ -15,7 +15,7 @@ use crate::{
     state::state::StateMachine,
 };
 
-#[derive(Default)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct Candidate {
     votes: HashSet<u32>,
 }

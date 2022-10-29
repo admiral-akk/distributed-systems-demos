@@ -14,6 +14,7 @@ use crate::{
 
 use super::follower::Follower;
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct Offline;
 
 impl Handler for Offline {}
@@ -63,60 +64,34 @@ mod tests {
     use crate::data::volitile_state::test_util::{
         FRESH_VOLITILE_STATE, VOLITILE_STATE, VOLITILE_STATE_TIMEOUT,
     };
+    use crate::state::concrete::follower::test_util::FOLLOWER;
     use crate::state::concrete::offline::test_util::OFFLINE;
+    use crate::state::state::test_util::{create_state, TestCase};
     use crate::test_util::STATE_MACHINE;
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
     #[test]
     fn test_tick() {
-        let (mut state, mut volitile_state, mut persistent_state, mut state_machine, request) = (
-            OFFLINE,
-            VOLITILE_STATE,
-            PERSISTENT_STATE(),
-            STATE_MACHINE(),
-            TICK,
-        );
-
-        let (requests, state) = state.handle_request(
-            request,
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-        );
-
-        if let RaftState::Offline(_) = state {
-        } else {
-            panic!("Didn't transition to offline!");
-        }
-        assert_eq!(requests, []);
-        assert_eq!(persistent_state, PERSISTENT_STATE());
-        assert_eq!(volitile_state, VOLITILE_STATE.increment_tick());
+        let state = create_state(STATE_MACHINE(), PERSISTENT_STATE(), OFFLINE, VOLITILE_STATE);
+        let request = TICK;
+        let mut test_case =
+            TestCase::new(state, request, "Offline - Tick").set_vs(VOLITILE_STATE.increment_tick());
+        test_case.run();
     }
 
     #[test]
     fn test_reboot() {
-        let (mut state, mut volitile_state, mut persistent_state, mut state_machine, request) = (
+        let state = create_state(
+            STATE_MACHINE(),
+            PERSISTENT_STATE(),
             OFFLINE,
             VOLITILE_STATE_TIMEOUT,
-            PERSISTENT_STATE(),
-            STATE_MACHINE(),
-            TICK,
         );
-
-        let (requests, state) = state.handle_request(
-            request,
-            &mut volitile_state,
-            &mut persistent_state,
-            &mut state_machine,
-        );
-
-        if let RaftState::Follower(_) = state {
-        } else {
-            panic!("Didn't transition to follower!");
-        }
-        assert_eq!(requests, []);
-        assert_eq!(persistent_state, PERSISTENT_STATE());
-        assert_eq!(volitile_state, FRESH_VOLITILE_STATE);
+        let request = TICK;
+        let mut test_case = TestCase::new(state, request, "Offline - Tick")
+            .set_vs(VOLITILE_STATE.set_commit(0))
+            .set_rs(FOLLOWER);
+        test_case.run();
     }
 }

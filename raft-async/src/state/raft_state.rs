@@ -10,6 +10,8 @@ use super::{
     handler::Handler,
     state::StateMachine,
 };
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum RaftState {
     Offline(Offline),
     Candidate(Candidate),

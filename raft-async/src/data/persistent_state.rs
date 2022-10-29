@@ -5,7 +5,7 @@ use super::{
     request::{ActiveConfig, Data, Event, Insert, Vote},
 };
 
-#[derive(Default, Clone, Debug, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct Config {
     pub servers: HashSet<u32>,
 }
@@ -16,7 +16,7 @@ impl Config {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Entry<T: Clone> {
     pub term: u32,
     pub data: Data<T>,
@@ -38,7 +38,7 @@ impl<T: Clone> Entry<T> {
     }
 }
 
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct PersistentState<T: Clone> {
     pub id: u32,
     pub current_term: u32,
@@ -46,7 +46,7 @@ pub struct PersistentState<T: Clone> {
     pub log: Vec<Entry<T>>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LogState {
     pub term: u32,
     pub length: usize,
@@ -194,6 +194,13 @@ pub mod test_util {
 
     use super::{Config, Entry, PersistentState};
 
+    impl<T: Clone> PersistentState<T> {
+        pub fn set_voted(mut self, voted_for: u32) -> Self {
+            self.voted_for = Some(voted_for);
+            self
+        }
+    }
+
     pub fn CONFIG() -> Config {
         Config {
             servers: [0, 1, 2, 3, 4].into(),
@@ -213,6 +220,14 @@ pub mod test_util {
             Entry::config(0, CONFIG()),
             Entry::command(1, 10),
             Entry::command(3, 4),
+        ])
+    }
+
+    pub fn MISMATCH_LOG() -> Vec<Entry<u32>> {
+        Vec::from([
+            Entry::config(0, CONFIG()),
+            Entry::command(1, 10),
+            Entry::command(2, 3),
         ])
     }
 
