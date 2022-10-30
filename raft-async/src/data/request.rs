@@ -1,6 +1,6 @@
 use std::{collections::HashSet, fmt::Debug};
 
-use crate::server::cluster::{Id, Message};
+use crate::server::raft_cluster::{Id, Message};
 
 use super::{
     data_type::CommandType,
@@ -70,6 +70,7 @@ pub struct Crash;
 pub struct Client<T: CommandType> {
     pub data: Data<T>,
 }
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 
 pub enum ClientResponse<T: CommandType, Output> {

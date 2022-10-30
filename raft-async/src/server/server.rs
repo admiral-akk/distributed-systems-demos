@@ -16,7 +16,7 @@ use crate::{
     state::state::{State, StateMachine},
 };
 
-use super::cluster::{Id, Message, RaftCluster};
+use super::raft_cluster::{Id, Message, RaftCluster};
 
 pub struct Server<T: CommandType, Output: Send> {
     pub id: u32,

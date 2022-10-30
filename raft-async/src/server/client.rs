@@ -14,7 +14,7 @@ use async_std::{
 };
 use rand::Rng;
 
-use super::cluster::{Id, Message, RaftCluster};
+use super::raft_cluster::{Id, Message, RaftCluster};
 
 pub struct Client<T: CommandType, Output>
 where
