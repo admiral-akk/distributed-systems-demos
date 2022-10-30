@@ -218,7 +218,7 @@ pub mod test_util {
     use crate::state::raft_state::RaftState;
 
     pub fn BASE_LEADER(log_length: usize, match_index: usize) -> RaftState {
-        BASE_LEADER_WITH_RANGE(log_length, match_index, (0..5))
+        BASE_LEADER_WITH_RANGE(log_length, match_index, 0..5)
     }
 
     pub fn BASE_LEADER_WITH_RANGE(
@@ -263,13 +263,18 @@ pub mod test_util {
 
 #[cfg(test)]
 mod tests {
-    use crate::data::persistent_state::test_util::LOG_WITH_CLIENT;
+    use crate::data::persistent_state::test_util::{
+        LOG, LOG_TRANSITION_STABLE_CONFIG, LOG_WITH_CLIENT,
+    };
     use crate::data::request::test_util::{
         CLIENT_COMMAND, INSERT_FAILED_RESPONSE, INSERT_SUCCESS_RESPONSE, MASS_HEARTBEAT, TICK,
     };
+    use crate::state::concrete::follower::test_util::FOLLOWER;
     use crate::state::concrete::leader::test_util::BASE_LEADER;
     use crate::state::state::test_util::TestCase;
     use crate::state::state::State;
+
+    use super::test_util::BASE_LEADER_WITH_RANGE;
 
     #[test]
     fn test_tick() {
@@ -301,10 +306,49 @@ mod tests {
         let mut test_case = TestCase::new(state, INSERT_FAILED_RESPONSE).set_next_index(0, 2);
         test_case.run();
     }
+
     #[test]
     fn test_client_request() {
         let state = State::create_state(BASE_LEADER(3, 2));
         let mut test_case = TestCase::new(state, CLIENT_COMMAND).set_log(LOG_WITH_CLIENT());
+        test_case.run();
+    }
+
+    #[test]
+    fn test_new_config_commit_no_quorum() {
+        let state = State::create_state(
+            BASE_LEADER_WITH_RANGE(3, 3, 0..7)
+                .set_match_index(0, 2)
+                .set_match_index(4, 2)
+                .set_match_index(5, 2)
+                .set_match_index(6, 2),
+        )
+        .set_log(LOG_TRANSITION_STABLE_CONFIG());
+        let mut test_case = TestCase::new(state, INSERT_SUCCESS_RESPONSE).set_match_index(0, 3);
+        test_case.run();
+    }
+
+    #[test]
+    fn test_new_config_commit_with_quorum() {
+        let state = State::create_state(
+            BASE_LEADER_WITH_RANGE(3, 3, 0..7)
+                .set_match_index(0, 2)
+                .set_match_index(5, 2)
+                .set_match_index(6, 2),
+        )
+        .set_log(LOG_TRANSITION_STABLE_CONFIG());
+        let mut test_case = TestCase::new(state, INSERT_SUCCESS_RESPONSE.set_sender(6))
+            .set_match_index(6, 3)
+            .set_commit(3);
+        test_case.run();
+    }
+
+    #[test]
+    fn test_new_config_demotion() {
+        let state = State::create_state(BASE_LEADER_WITH_RANGE(3, 3, 0..7))
+            .set_commit(3)
+            .set_log(LOG_TRANSITION_STABLE_CONFIG());
+        let mut test_case = TestCase::new(state, TICK).set_rs(FOLLOWER).increment_tick();
         test_case.run();
     }
 }

@@ -135,6 +135,11 @@ pub mod test_util {
             self.term = term;
             self
         }
+
+        pub fn set_sender(mut self, sender: u32) -> Self {
+            self.sender = sender;
+            self
+        }
     }
 
     impl<In: CommandType> Insert<In> {}
