@@ -77,7 +77,7 @@ impl<T: CommandType> PersistentState<T> {
             .iter()
             .enumerate()
             .rev()
-            .filter(|(i, entry)| match entry.data {
+            .filter(|(_i, entry)| match entry.data {
                 Data::Command(_) => false,
                 Data::Config(_) => true,
             })

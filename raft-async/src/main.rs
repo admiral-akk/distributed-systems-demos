@@ -5,7 +5,7 @@ use async_std::sync::Arc;
 use async_std::task;
 use data::request::Request;
 use rand::Rng;
-use server::{client::Client, raft_cluster::RaftCluster};
+use server::{raft_cluster::RaftCluster};
 use state::state::StateMachine;
 
 mod data;

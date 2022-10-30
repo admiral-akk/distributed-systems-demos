@@ -213,7 +213,7 @@ impl EventHandler for Leader {
 
 #[cfg(test)]
 pub mod test_util {
-    use std::{collections::HashSet, ops::Range};
+    use std::{collections::HashSet};
 
     use super::Leader;
     use crate::{

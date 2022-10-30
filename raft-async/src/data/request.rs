@@ -113,7 +113,7 @@ pub struct Tick;
 
 #[cfg(test)]
 pub mod test_util {
-    use std::ops::Range;
+    
 
     use super::{
         ActiveConfig, Client, Crash, Data, Event, Insert, InsertResponse, Request, Tick, Vote,
@@ -169,7 +169,7 @@ pub mod test_util {
     };
 
     pub fn REQUEST_VOTES(term: u32) -> Vec<Request<u32, u32>> {
-        let mut request = VOTE.reverse_sender().set_term(term);
+        let request = VOTE.reverse_sender().set_term(term);
         CONFIG()
             .servers
             .iter()
@@ -261,7 +261,7 @@ pub mod test_util {
     }
 
     pub fn MASS_HEARTBEAT_WITH_RANGE(term: u32, config: Config) -> Vec<Request<u32, u32>> {
-        let mut request = INSERT_HEARTBEAT.reverse_sender().set_term(term);
+        let request = INSERT_HEARTBEAT.reverse_sender().set_term(term);
         config
             .servers
             .iter()
