@@ -69,24 +69,65 @@ impl LatestConfig {
 }
 
 impl<T: CommandType> PersistentState<T> {
-    pub fn latest_config(&self, commit_index: usize) -> LatestConfig {
-        self.log
+    pub fn latest_config(&self, commit_index: usize) -> (Option<LatestConfig>, LatestConfig) {
+        let mut configs = self
+            .log
             .iter()
             .enumerate()
             .rev()
-            .filter(|(_i, entry)| match entry.data {
+            .filter(|(i, entry)| match entry.data {
                 Data::Command(_) => false,
                 Data::Config(_) => true,
             })
             .map(|(i, entry)| match &entry.data {
-                Data::Config(active_config) => LatestConfig {
-                    config: active_config.clone(),
+                Data::Config(config) => LatestConfig {
+                    config: config.clone(),
                     committed: i < commit_index,
                 },
                 _ => panic!(),
-            })
-            .next()
-            .unwrap()
+            });
+        let next = configs.next().unwrap();
+        let prev = configs.next();
+        (prev, next)
+    }
+
+    pub fn has_quorum(&self, commit_index: usize, matching: &HashSet<u32>) -> bool {
+        let (prev, latest) = self.latest_config(commit_index);
+        match (prev, &latest) {
+            (
+                Some(LatestConfig {
+                    config,
+                    committed: true,
+                }),
+                LatestConfig {
+                    committed: false, ..
+                },
+            ) => config.has_quorum(matching),
+            _ => latest.config.has_quorum(matching),
+        }
+    }
+
+    pub fn other_servers(&self, commit_index: usize) -> Vec<u32> {
+        let (prev, latest) = self.latest_config(commit_index);
+        match (&prev, &latest) {
+            (
+                Some(LatestConfig {
+                    config: previous, ..
+                }),
+                LatestConfig {
+                    committed: false,
+                    config: latest,
+                },
+            ) => match latest {
+                ActiveConfig::Stable(_) => previous,
+                ActiveConfig::Transition { .. } => latest,
+            },
+            _ => &latest.config,
+        }
+        .servers()
+        .into_iter()
+        .filter(|server| !self.id.eq(server))
+        .collect()
     }
 
     pub fn push(&mut self, data: Data<T>) {
@@ -173,24 +214,12 @@ impl<T: CommandType> PersistentState<T> {
             }),
         }
     }
-
-    pub fn has_quorum(&self, matching: &HashSet<u32>) -> bool {
-        self.latest_config(self.log.len())
-            .config
-            .has_quorum(matching)
-    }
-
-    pub fn other_servers(&self) -> Vec<u32> {
-        self.latest_config(self.log.len())
-            .servers()
-            .into_iter()
-            .filter(|server| !self.id.eq(server))
-            .collect()
-    }
 }
 
 #[cfg(test)]
 pub mod test_util {
+    use crate::data::request::{ActiveConfig, Data};
+
     use super::{Config, Entry, PersistentState};
 
     impl<T: Clone> PersistentState<T> {
@@ -210,6 +239,48 @@ pub mod test_util {
             servers: [0, 1, 2, 3, 4].into(),
         }
     }
+    pub fn NEW_CONFIG() -> Config {
+        Config {
+            servers: [2, 3, 4, 5, 6].into(),
+        }
+    }
+
+    pub fn LOG_TRANSITION_CONFIG() -> Vec<Entry<u32>> {
+        Vec::from([
+            Entry {
+                term: 0,
+                data: Data::Config(ActiveConfig::Stable(CONFIG())),
+            },
+            Entry {
+                term: 1,
+                data: Data::Config(ActiveConfig::Transition {
+                    prev: CONFIG(),
+                    new: NEW_CONFIG(),
+                }),
+            },
+        ])
+    }
+
+    pub fn LOG_TRANSITION_STABLE_CONFIG() -> Vec<Entry<u32>> {
+        Vec::from([
+            Entry {
+                term: 0,
+                data: Data::Config(ActiveConfig::Stable(CONFIG())),
+            },
+            Entry {
+                term: 1,
+                data: Data::Config(ActiveConfig::Transition {
+                    prev: CONFIG(),
+                    new: NEW_CONFIG(),
+                }),
+            },
+            Entry {
+                term: 3,
+                data: Data::Config(ActiveConfig::Stable(NEW_CONFIG())),
+            },
+        ])
+    }
+
     pub fn LOG_LEADER() -> Vec<Entry<u32>> {
         let mut log = LOG();
         log.extend(

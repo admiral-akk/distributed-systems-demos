@@ -112,6 +112,8 @@ pub struct Tick;
 
 #[cfg(test)]
 pub mod test_util {
+    use std::ops::Range;
+
     use super::{
         ActiveConfig, Client, Crash, Data, Event, Insert, InsertResponse, Request, Tick, Vote,
         VoteResponse,
@@ -152,13 +154,12 @@ pub mod test_util {
     };
 
     pub fn REQUEST_VOTES(term: u32) -> Vec<Request<u32, u32>> {
-        let request = VOTE.reverse_sender();
+        let mut request = VOTE.reverse_sender().set_term(term);
         (0..5)
             .filter(|id| !request.sender.eq(id))
             .map(|id| {
                 let mut request = request.clone();
                 request.reciever = id;
-                request.term = term;
                 request
             })
             .collect()
@@ -239,8 +240,12 @@ pub mod test_util {
     }
 
     pub fn MASS_HEARTBEAT(term: u32) -> Vec<Request<u32, u32>> {
-        let request = INSERT_HEARTBEAT.reverse_sender().set_term(term);
-        (0..5)
+        MASS_HEARTBEAT_WITH_RANGE(term, 0..5)
+    }
+
+    pub fn MASS_HEARTBEAT_WITH_RANGE(term: u32, range: Range<u32>) -> Vec<Request<u32, u32>> {
+        let mut request = INSERT_HEARTBEAT.reverse_sender().set_term(term);
+        range
             .filter(|id| !request.sender.eq(id))
             .map(|id| {
                 let mut request = request.clone();

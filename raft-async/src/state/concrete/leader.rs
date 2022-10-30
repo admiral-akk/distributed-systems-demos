@@ -31,32 +31,33 @@ impl Leader {
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T, Output>>, RaftState) {
-        let latest_config = persistent_state.latest_config(volitile_state.commit_index);
+        let latest_config = persistent_state
+            .latest_config(volitile_state.commit_index)
+            .1;
 
         // If we recently committed a configuration that removes this server, it demotes itself.
-        if latest_config.committed
-            && !latest_config
+        if latest_config.committed {
+            if !latest_config
                 .config
                 .servers()
                 .contains(&persistent_state.id)
-        {
-            return (Vec::new(), Follower.into());
+            {
+                return (Vec::new(), Follower.into());
+            }
+
+            if let ActiveConfig::Transition { new, .. } = latest_config.config {
+                persistent_state.log.push(Entry {
+                    term: persistent_state.current_term,
+                    data: Data::Config(ActiveConfig::Stable(new.clone())),
+                });
+            }
         }
 
         // If we recently committed a configuration that transitions between two configurations, append the new configuration on its own.
-        match latest_config {
-            LatestConfig {
-                committed: true,
-                config: ActiveConfig::Transition { new, .. },
-            } => persistent_state
-                .log
-                .push(Entry::config(persistent_state.current_term, new.clone())),
-            _ => {}
-        };
 
         (
             persistent_state
-                .other_servers()
+                .other_servers(volitile_state.commit_index)
                 .iter()
                 .map(|server| self.append_update(volitile_state, persistent_state, *server))
                 .collect(),
@@ -90,17 +91,28 @@ impl Leader {
         persistent_state.current_term += 1;
         volitile_state.tick_since_start = 0;
         println!("{} elected leader!", persistent_state.id);
+
+        let latest_config = persistent_state
+            .latest_config(volitile_state.commit_index)
+            .1;
+
+        // If we recently committed a configuration that removes this server, it demotes itself.
+        if latest_config.committed {
+            if let ActiveConfig::Transition { new, .. } = latest_config.config {
+                persistent_state.log.push(Entry {
+                    term: persistent_state.current_term,
+                    data: Data::Config(ActiveConfig::Stable(new.clone())),
+                });
+            }
+        }
+        let other_servers = persistent_state.other_servers(volitile_state.commit_index);
         let leader = Leader {
             next_index: persistent_state
-                .other_servers()
+                .other_servers(volitile_state.commit_index)
                 .iter()
                 .map(|id| (*id, persistent_state.log.len()))
                 .collect(),
-            match_index: persistent_state
-                .other_servers()
-                .iter()
-                .map(|id| (*id, 0))
-                .collect(),
+            match_index: other_servers.iter().map(|id| (*id, 0)).collect(),
         };
         leader.send_heartbeat(volitile_state, persistent_state)
     }
@@ -129,8 +141,9 @@ impl EventHandler for Leader {
                         (Vec::new(), self.into())
                     }
                     Data::Config(_) => {
-                        let latest_config =
-                            persistent_state.latest_config(volitile_state.commit_index);
+                        let latest_config = persistent_state
+                            .latest_config(volitile_state.commit_index)
+                            .1;
                         match latest_config {
                             LatestConfig {
                                 config: ActiveConfig::Stable(_),
@@ -177,7 +190,7 @@ impl EventHandler for Leader {
                     .map(|(id, _)| *id)
                     .collect();
 
-                if persistent_state.has_quorum(&matching_servers) {
+                if persistent_state.has_quorum(volitile_state.commit_index, &matching_servers) {
                     if volitile_state.try_update_commit_index(
                         state_machine,
                         persistent_state,
@@ -199,16 +212,27 @@ impl EventHandler for Leader {
 
 #[cfg(test)]
 pub mod test_util {
+    use std::ops::Range;
+
     use super::Leader;
     use crate::state::raft_state::RaftState;
 
     pub fn BASE_LEADER(log_length: usize, match_index: usize) -> RaftState {
+        BASE_LEADER_WITH_RANGE(log_length, match_index, (0..5))
+    }
+
+    pub fn BASE_LEADER_WITH_RANGE(
+        log_length: usize,
+        match_index: usize,
+        range: Range<u32>,
+    ) -> RaftState {
         RaftState::Leader(super::Leader {
-            next_index: (0..5)
+            next_index: range
+                .clone()
                 .filter(|id| *id != 1)
                 .map(|id| (id, log_length))
                 .collect(),
-            match_index: (0..5)
+            match_index: range
                 .filter(|id| *id != 1)
                 .map(|id| (id, match_index))
                 .collect(),
