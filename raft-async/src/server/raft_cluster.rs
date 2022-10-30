@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, default, time::Duration};
 
 use async_std::{
     channel::{self, Receiver, Sender},
@@ -21,15 +21,11 @@ use super::{client::Client, server::Server};
 
 // todo: change id into an enum so you can seperate client/server
 #[derive(Clone, Copy, Default, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Id {
-    id: u32,
-}
-
-impl Id {
-    pub const NONE: Id = Id::new(10000);
-    pub const fn new(id: u32) -> Id {
-        Id { id }
-    }
+pub enum Id {
+    #[default]
+    None,
+    Client(u32),
+    Server(u32),
 }
 
 pub trait Message: Send + 'static {
@@ -48,7 +44,7 @@ pub struct RaftCluster<T> {
 impl<In: CommandType, Out: OutputType> RaftCluster<Request<In, Out>> {
     pub fn init<SM: StateMachine<In, Out>>(initial_size: u32) -> Arc<Self> {
         let initial_config = Config {
-            servers: (0..initial_size).map(|id| Id::new(id)).collect(),
+            servers: (0..initial_size).map(|id| Id::Server(id)).collect(),
         };
         let (sender, reciever) = channel::unbounded();
 
@@ -68,7 +64,7 @@ impl<In: CommandType, Out: OutputType> RaftCluster<Request<In, Out>> {
 
     pub fn add_client<DataGen: DataGenerator<In>>(switch: Arc<Self>) {
         let clients = (10..12)
-            .map(|id| Client::<In, Out>::new(Id::new(id), switch.clone()))
+            .map(|id| Client::<In, Out>::new(Id::Client(id), switch.clone()))
             .map(|client| Arc::new(task::block_on(client)))
             .collect::<Vec<_>>();
 
@@ -119,14 +115,14 @@ impl<In: CommandType, Out: OutputType> RaftCluster<Request<In, Out>> {
 pub mod test_util {
     use super::Id;
 
-    pub const CLIENT_0: Id = Id::new(10);
-    pub const SERVER_0: Id = Id::new(0);
-    pub const SERVER_1: Id = Id::new(1);
-    pub const SERVER_2: Id = Id::new(2);
-    pub const SERVER_3: Id = Id::new(3);
-    pub const SERVER_4: Id = Id::new(4);
-    pub const SERVER_5: Id = Id::new(5);
-    pub const SERVER_6: Id = Id::new(6);
+    pub const CLIENT_0: Id = Id::Client(10);
+    pub const SERVER_0: Id = Id::Server(0);
+    pub const SERVER_1: Id = Id::Server(1);
+    pub const SERVER_2: Id = Id::Server(2);
+    pub const SERVER_3: Id = Id::Server(3);
+    pub const SERVER_4: Id = Id::Server(4);
+    pub const SERVER_5: Id = Id::Server(5);
+    pub const SERVER_6: Id = Id::Server(6);
 
-    pub const NONE: Id = Id::new(10000);
+    pub const NONE: Id = Id::None;
 }

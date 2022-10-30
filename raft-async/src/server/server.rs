@@ -69,8 +69,8 @@ where
                 .server_sender
                 .send(Request {
                     event: Event::Crash(Crash),
-                    sender: Id::NONE,
-                    reciever: Id::NONE,
+                    sender: Id::None,
+                    reciever: Id::None,
                     term: 0,
                 })
                 .await;
@@ -87,8 +87,8 @@ where
                 .server_sender
                 .send(Request {
                     event: Event::Tick(Tick),
-                    sender: Id::NONE,
-                    reciever: Id::NONE,
+                    sender: Id::None,
+                    reciever: Id::None,
                     term: 0,
                 })
                 .await;
