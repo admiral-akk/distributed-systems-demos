@@ -106,6 +106,25 @@ impl<T: CommandType> PersistentState<T> {
             _ => latest.config.has_quorum(matching),
         }
     }
+    pub fn servers(&self, commit_index: usize) -> HashSet<u32> {
+        let (prev, latest) = self.latest_config(commit_index);
+        match (&prev, &latest) {
+            (
+                Some(LatestConfig {
+                    config: previous, ..
+                }),
+                LatestConfig {
+                    committed: false,
+                    config: latest,
+                },
+            ) => match latest {
+                ActiveConfig::Stable(_) => previous,
+                ActiveConfig::Transition { .. } => latest,
+            },
+            _ => &latest.config,
+        }
+        .servers()
+    }
 
     pub fn other_servers(&self, commit_index: usize) -> Vec<u32> {
         let (prev, latest) = self.latest_config(commit_index);

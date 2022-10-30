@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use async_std::{
     channel::{self, Receiver, Sender},
@@ -11,7 +11,7 @@ use crate::{
     data::{
         data_type::{CommandType, OutputType},
         persistent_state::Config,
-        request::Request,
+        request::{ActiveConfig, Client, Data, Event, Request},
     },
     state::state::StateMachine,
 };
@@ -37,6 +37,7 @@ pub struct RaftCluster<T> {
     pub reciever: Receiver<T>,
     pub senders: Mutex<HashMap<Id, Sender<T>>>,
     pub initial_config: Config,
+    pub curr_config: Mutex<Config>,
 }
 
 impl<In: CommandType, Out: OutputType> RaftCluster<Request<In, Out>> {
@@ -47,13 +48,40 @@ impl<In: CommandType, Out: OutputType> RaftCluster<Request<In, Out>> {
             sender,
             reciever,
             senders: Default::default(),
+            curr_config: Mutex::new(initial_config.clone()),
             initial_config: initial_config.clone(),
         });
         for server in initial_config.servers {
             task::spawn(Server::init::<SM>(server, switch.clone()));
         }
         task::spawn(RaftCluster::request_loop(switch.clone()));
+        task::spawn(RaftCluster::add_servers::<SM>(switch.clone()));
         switch
+    }
+
+    async fn add_servers<SM: StateMachine<In, Out>>(switch: Arc<Self>) {
+        loop {
+            task::sleep(Duration::from_millis(15000)).await;
+            let mut config = switch.curr_config.lock().await;
+            let max = *config.servers.iter().max().unwrap() + 1;
+            for id in max..(max + 2) {
+                println!("Adding server: {}", id);
+                task::spawn(Server::init::<SM>(id, switch.clone()));
+                config.servers.insert(id);
+            }
+            for id in config.servers.iter() {
+                switch.sender.send(Request {
+                    sender: 100,
+                    reciever: *id,
+                    term: 0,
+                    event: Event::Client(Client {
+                        data: Data::Config(ActiveConfig::Stable(config.clone())),
+                    }),
+                });
+            }
+            config.servers.remove(&(max - 5));
+            config.servers.remove(&(max - 4));
+        }
     }
 
     async fn request_loop(switch: Arc<Self>) {

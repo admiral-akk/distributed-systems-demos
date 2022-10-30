@@ -26,6 +26,13 @@ pub struct State<T: CommandType, SM> {
 }
 
 impl<T: CommandType, SM: Default> State<T, SM> {
+    pub fn shutdown(&self) -> bool {
+        !self
+            .persistent_state
+            .servers(self.volitile_state.commit_index)
+            .contains(&self.persistent_state.id)
+    }
+
     pub fn new(id: u32, config: Config) -> Self {
         Self {
             state_machine: SM::default(),

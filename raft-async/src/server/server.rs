@@ -1,8 +1,8 @@
-use std::{time::Duration};
+use std::time::Duration;
 
 use async_std::{
     channel::{Receiver, Sender},
-    sync::Arc,
+    sync::{Arc, Mutex},
     task,
 };
 use rand::Rng;
@@ -23,6 +23,7 @@ pub struct Server<T: CommandType, Output: Send> {
     pub input: Receiver<Request<T, Output>>,
     pub output: Sender<Request<T, Output>>,
     pub server_sender: Sender<Request<T, Output>>,
+    pub shutdown: Mutex<bool>,
 }
 
 const SERVER_FAILURE: Duration = Duration::from_millis(10000);
@@ -47,6 +48,7 @@ where
             output,
             id,
             server_sender,
+            shutdown: Mutex::new(false),
         });
         task::spawn(Server::random_shutdown(server.clone()));
         task::spawn(Server::request_loop::<SM>(
@@ -60,6 +62,9 @@ where
         loop {
             let timeout = rand::thread_rng().gen_range((SERVER_FAILURE / 2)..(2 * SERVER_FAILURE));
             task::sleep(timeout).await;
+            if server.shutdown.lock().await.eq(&true) {
+                return;
+            }
             server
                 .server_sender
                 .send(Request {
@@ -75,6 +80,9 @@ where
     async fn tick_loop(server: Arc<Self>) {
         loop {
             task::sleep(tick()).await;
+            if server.shutdown.lock().await.eq(&true) {
+                return;
+            }
             server
                 .server_sender
                 .send(Request {
@@ -92,6 +100,13 @@ where
         let mut responses;
         loop {
             let request = server.input.recv().await;
+            {
+                let mut shutdown = server.shutdown.lock().await;
+                *shutdown |= state.shutdown();
+                if *shutdown {
+                    return;
+                }
+            }
             if let Ok(request) = request {
                 (responses, state) = state.handle_request(request);
                 for response in responses {
