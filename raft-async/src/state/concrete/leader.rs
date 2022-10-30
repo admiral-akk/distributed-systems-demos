@@ -4,7 +4,9 @@ use crate::{
     data::{
         data_type::CommandType,
         persistent_state::{Entry, LatestConfig, PersistentState},
-        request::{ActiveConfig, Client, ClientResponse, Event, InsertResponse, Request, Tick},
+        request::{
+            ActiveConfig, Client, ClientData, ClientResponse, Event, InsertResponse, Request, Tick,
+        },
         volitile_state::VolitileState,
     },
     server::raft_cluster::Id,
@@ -134,14 +136,14 @@ impl EventHandler for Leader {
         SM: StateMachine<T, Output>,
     {
         match request.event {
-            Event::Client(Client { data }) => {
+            Event::Client(Client { id, data }) => {
                 // If we are not in a stable config state, we cannot transition.
-                match data {
-                    Data::Command(_) => {
-                        persistent_state.push(data);
+                match &data {
+                    ClientData::Command(command) => {
+                        persistent_state.push(Data::Command(command.clone()));
                         (Vec::new(), self.into())
                     }
-                    Data::Config(_) => {
+                    ClientData::Config(config) => {
                         let latest_config = persistent_state
                             .latest_config(volitile_state.commit_index)
                             .1;
@@ -150,7 +152,8 @@ impl EventHandler for Leader {
                                 config: ActiveConfig::Stable(_),
                                 committed: true,
                             } => {
-                                persistent_state.push(data);
+                                persistent_state
+                                    .push(Data::Config(ActiveConfig::Stable(config.clone())));
                                 (Vec::new(), self.into())
                             }
                             _ => {
@@ -213,7 +216,7 @@ impl EventHandler for Leader {
 
 #[cfg(test)]
 pub mod test_util {
-    use std::{collections::HashSet};
+    use std::collections::HashSet;
 
     use super::Leader;
     use crate::{

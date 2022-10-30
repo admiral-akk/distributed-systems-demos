@@ -1,9 +1,9 @@
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 
 use crate::{
     data::{
         data_type::{CommandType, OutputType},
-        request::{self, ClientResponse, Event, Request},
+        request::{self, ClientData, ClientResponse, Event, Request, TransactionId},
     },
     DataGenerator,
 };
@@ -22,6 +22,7 @@ where
 {
     pub id: Id,
     pub leader_id: Mutex<Id>,
+    pub transactions: Mutex<HashSet<TransactionId>>,
     pub input: Receiver<Request<T, Output>>,
     pub output: Sender<Request<T, Output>>,
     pub server_sender: Sender<Request<T, Output>>,
@@ -37,6 +38,7 @@ where
         let (output, server_sender, input) = switch.register(id).await;
         Self {
             id,
+            transactions: Default::default(),
             leader_id: Mutex::new(Id::default()),
             input,
             output,
@@ -49,6 +51,16 @@ where
         task::spawn(Client::response_loop(server.clone()));
     }
 
+    pub async fn transaction_id(&self) -> TransactionId {
+        let mut id = TransactionId(self.id, rand::thread_rng().gen());
+        let mut used = self.transactions.lock().await;
+        while used.contains(&id) {
+            id = TransactionId(self.id, rand::thread_rng().gen());
+        }
+        used.insert(id.clone());
+        id
+    }
+
     async fn request_loop<Gen: DataGenerator<T>>(client: Arc<Client<T, Output>>, data_gen: Gen) {
         loop {
             let wait_duration = rand::thread_rng().gen_range((WAIT / 2)..(2 * WAIT));
@@ -58,7 +70,8 @@ where
                 reciever: *client.leader_id.lock().await,
                 term: 0,
                 event: Event::Client(request::Client {
-                    data: request::Data::Command(data_gen.gen()),
+                    id: client.transaction_id().await,
+                    data: ClientData::Command(data_gen.gen()),
                 }),
             };
             client.output.send(request).await;
@@ -80,7 +93,10 @@ where
                                     sender: client.id,
                                     reciever: leader_id,
                                     term: 0,
-                                    event: Event::Client(request::Client { data }),
+                                    event: Event::Client(request::Client {
+                                        id: client.transaction_id().await,
+                                        data,
+                                    }),
                                 };
                                 client.output.send(response).await;
                             }

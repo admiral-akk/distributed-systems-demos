@@ -53,6 +53,13 @@ pub enum Data<T> {
     Command(T),
     Config(ActiveConfig),
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ClientData<T> {
+    Command(T),
+    Config(Config),
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Event<T: CommandType, Output> {
     Insert(Insert<T>),
@@ -68,7 +75,22 @@ pub enum Event<T: CommandType, Output> {
 pub struct Crash;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Client<T: CommandType> {
-    pub data: Data<T>,
+    pub id: TransactionId,
+    pub data: ClientData<T>,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct TransactionId(pub Id, pub u32);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ResponseEvent<T: CommandType, Output> {
+    Failed {
+        leader_id: Option<Id>,
+        data: ClientData<T>,
+    },
+    Success {
+        data: Output,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -76,7 +98,7 @@ pub struct Client<T: CommandType> {
 pub enum ClientResponse<T: CommandType, Output> {
     Failed {
         leader_id: Option<Id>,
-        data: Data<T>,
+        data: ClientData<T>,
     },
     Success {
         data: Output,
@@ -113,11 +135,10 @@ pub struct Tick;
 
 #[cfg(test)]
 pub mod test_util {
-    
 
     use super::{
-        ActiveConfig, Client, Crash, Data, Event, Insert, InsertResponse, Request, Tick, Vote,
-        VoteResponse,
+        ActiveConfig, Client, ClientData, Crash, Data, Event, Insert, InsertResponse, Request,
+        Tick, TransactionId, Vote, VoteResponse,
     };
     use crate::{
         data::{
@@ -297,7 +318,8 @@ pub mod test_util {
         sender: CLIENT_0,
         reciever: SERVER_1,
         event: Event::Client(Client {
-            data: Data::Command(100),
+            id: TransactionId(CLIENT_0, 0),
+            data: ClientData::Command(100),
         }),
     };
 
@@ -307,7 +329,7 @@ pub mod test_util {
         reciever: CLIENT_0,
         event: Event::ClientResponse(super::ClientResponse::Failed {
             leader_id: None,
-            data: Data::Command(100),
+            data: ClientData::Command(100),
         }),
     };
 
@@ -317,7 +339,7 @@ pub mod test_util {
         reciever: CLIENT_0,
         event: Event::ClientResponse(super::ClientResponse::Failed {
             leader_id: Some(SERVER_0),
-            data: Data::Command(100),
+            data: ClientData::Command(100),
         }),
     };
 
@@ -327,7 +349,8 @@ pub mod test_util {
             sender: CLIENT_0,
             reciever: SERVER_1,
             event: Event::Client(Client {
-                data: Data::Config(ActiveConfig::Stable(NEW_CONFIG())),
+                id: TransactionId(CLIENT_0, 0),
+                data: ClientData::Config(NEW_CONFIG()),
             }),
         }
     }
