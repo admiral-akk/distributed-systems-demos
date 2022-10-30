@@ -11,19 +11,24 @@ use crate::{
     data::{
         data_type::{CommandType, OutputType},
         persistent_state::Config,
-        request::{ActiveConfig, Client, Data, Event, Request},
+        request::Request,
     },
     state::state::StateMachine,
+    DataGenerator,
 };
 
-use super::server::Server;
+use super::{client::Client, server::Server};
 
-#[derive(Hash, PartialEq, Eq)]
-pub struct Id(u32); // todo: change id into an enum so you can seperate client/server
+// todo: change id into an enum so you can seperate client/server
+#[derive(Clone, Copy, Default, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Id {
+    id: u32,
+}
 
 impl Id {
-    pub fn new(id: u32) -> Id {
-        Id(id)
+    pub const NONE: Id = Id::new(10000);
+    pub const fn new(id: u32) -> Id {
+        Id { id }
     }
 }
 
@@ -41,7 +46,10 @@ pub struct RaftCluster<T> {
 }
 
 impl<In: CommandType, Out: OutputType> RaftCluster<Request<In, Out>> {
-    pub fn init<SM: StateMachine<In, Out>>(initial_config: Config) -> Arc<Self> {
+    pub fn init<SM: StateMachine<In, Out>>(initial_size: u32) -> Arc<Self> {
+        let initial_config = Config {
+            servers: (0..initial_size).map(|id| Id::new(id)).collect(),
+        };
         let (sender, reciever) = channel::unbounded();
 
         let switch = Arc::new(Self {
@@ -55,32 +63,17 @@ impl<In: CommandType, Out: OutputType> RaftCluster<Request<In, Out>> {
             task::spawn(Server::init::<SM>(server, switch.clone()));
         }
         task::spawn(RaftCluster::request_loop(switch.clone()));
-        task::spawn(RaftCluster::add_servers::<SM>(switch.clone()));
         switch
     }
 
-    async fn add_servers<SM: StateMachine<In, Out>>(switch: Arc<Self>) {
-        loop {
-            task::sleep(Duration::from_millis(15000)).await;
-            let mut config = switch.curr_config.lock().await;
-            let max = *config.servers.iter().max().unwrap() + 1;
-            for id in max..(max + 2) {
-                println!("Adding server: {}", id);
-                task::spawn(Server::init::<SM>(id, switch.clone()));
-                config.servers.insert(id);
-            }
-            for id in config.servers.iter() {
-                switch.sender.send(Request {
-                    sender: 100,
-                    reciever: *id,
-                    term: 0,
-                    event: Event::Client(Client {
-                        data: Data::Config(ActiveConfig::Stable(config.clone())),
-                    }),
-                });
-            }
-            config.servers.remove(&(max - 5));
-            config.servers.remove(&(max - 4));
+    pub fn add_client<DataGen: DataGenerator<In>>(switch: Arc<Self>) {
+        let clients = (10..12)
+            .map(|id| Client::<In, Out>::new(Id::new(id), switch.clone()))
+            .map(|client| Arc::new(task::block_on(client)))
+            .collect::<Vec<_>>();
+
+        for client in clients {
+            Client::init::<DataGen>(client);
         }
     }
 
@@ -120,4 +113,20 @@ impl<In: CommandType, Out: OutputType> RaftCluster<Request<In, Out>> {
         self.senders.lock().await.insert(id, server_sender.clone());
         (self.sender.clone(), server_sender, server_reciever)
     }
+}
+
+#[cfg(test)]
+pub mod test_util {
+    use super::Id;
+
+    pub const CLIENT_0: Id = Id::new(10);
+    pub const SERVER_0: Id = Id::new(0);
+    pub const SERVER_1: Id = Id::new(1);
+    pub const SERVER_2: Id = Id::new(2);
+    pub const SERVER_3: Id = Id::new(3);
+    pub const SERVER_4: Id = Id::new(4);
+    pub const SERVER_5: Id = Id::new(5);
+    pub const SERVER_6: Id = Id::new(6);
+
+    pub const NONE: Id = Id::new(10000);
 }

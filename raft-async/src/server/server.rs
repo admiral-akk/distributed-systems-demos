@@ -19,7 +19,7 @@ use crate::{
 use super::raft_cluster::{Id, Message, RaftCluster};
 
 pub struct Server<T: CommandType, Output: Send> {
-    pub id: u32,
+    pub id: Id,
     pub input: Receiver<Request<T, Output>>,
     pub output: Sender<Request<T, Output>>,
     pub server_sender: Sender<Request<T, Output>>,
@@ -39,10 +39,10 @@ where
     PersistentState<T>: Default,
 {
     pub async fn init<SM: StateMachine<T, Output>>(
-        id: u32,
+        id: Id,
         switch: Arc<RaftCluster<Request<T, Output>>>,
     ) {
-        let (output, server_sender, input) = switch.register(Id::new(id)).await;
+        let (output, server_sender, input) = switch.register(id).await;
         let server = Arc::new(Self {
             input,
             output,
@@ -69,8 +69,8 @@ where
                 .server_sender
                 .send(Request {
                     event: Event::Crash(Crash),
-                    sender: 0,
-                    reciever: 0,
+                    sender: Id::NONE,
+                    reciever: Id::NONE,
                     term: 0,
                 })
                 .await;
@@ -87,8 +87,8 @@ where
                 .server_sender
                 .send(Request {
                     event: Event::Tick(Tick),
-                    sender: 0,
-                    reciever: 0,
+                    sender: Id::NONE,
+                    reciever: Id::NONE,
                     term: 0,
                 })
                 .await;

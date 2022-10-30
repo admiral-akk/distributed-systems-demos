@@ -7,6 +7,7 @@ use crate::{
         request::Request,
         volitile_state::VolitileState,
     },
+    server::raft_cluster::Id,
     state::concrete::follower::Follower,
 };
 
@@ -33,7 +34,7 @@ impl<T: CommandType, SM: Default> State<T, SM> {
             .contains(&self.persistent_state.id)
     }
 
-    pub fn new(id: u32, config: Config) -> Self {
+    pub fn new(id: Id, config: Config) -> Self {
         Self {
             state_machine: SM::default(),
             volitile_state: VolitileState {
@@ -63,7 +64,7 @@ impl<T: CommandType, SM: Default> State<T, SM> {
             _ => {
                 if request.term > self.persistent_state.current_term {
                     println!(
-                        "New term, {} reverting to follower.",
+                        "New term, {:?} reverting to follower.",
                         self.persistent_state.id
                     );
                     self.persistent_state.current_term = request.term;
@@ -92,6 +93,7 @@ pub mod test_util {
             request::Request,
             volitile_state::{test_util::VOLITILE_STATE, VolitileState},
         },
+        server::raft_cluster::Id,
         state::raft_state::RaftState,
         Sum,
     };
@@ -109,7 +111,7 @@ pub mod test_util {
             }
         }
 
-        pub fn set_voted(mut self, voted_for: u32) -> Self {
+        pub fn set_voted(mut self, voted_for: Id) -> Self {
             self.persistent_state = self.persistent_state.set_voted(voted_for);
             self
         }
@@ -147,11 +149,11 @@ pub mod test_util {
             self.state_machine.total = total;
             self
         }
-        pub fn set_next_index(mut self, id: u32, index: usize) -> Self {
+        pub fn set_next_index(mut self, id: Id, index: usize) -> Self {
             self.raft_state = self.raft_state.set_next_index(id, index);
             self
         }
-        pub fn set_match_index(mut self, id: u32, index: usize) -> Self {
+        pub fn set_match_index(mut self, id: Id, index: usize) -> Self {
             self.raft_state = self.raft_state.set_match_index(id, index);
             self
         }
@@ -185,7 +187,7 @@ pub mod test_util {
             self
         }
 
-        pub fn set_voted(mut self, voted_for: u32) -> Self {
+        pub fn set_voted(mut self, voted_for: Id) -> Self {
             self.expected_state.persistent_state.voted_for = Some(voted_for);
             self
         }
@@ -224,11 +226,11 @@ pub mod test_util {
             self.expected_state = self.expected_state.set_commit(commit_index);
             self
         }
-        pub fn set_next_index(mut self, id: u32, index: usize) -> Self {
+        pub fn set_next_index(mut self, id: Id, index: usize) -> Self {
             self.expected_state = self.expected_state.set_next_index(id, index);
             self
         }
-        pub fn set_match_index(mut self, id: u32, index: usize) -> Self {
+        pub fn set_match_index(mut self, id: Id, index: usize) -> Self {
             self.expected_state = self.expected_state.set_match_index(id, index);
             self
         }

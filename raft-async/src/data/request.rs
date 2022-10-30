@@ -10,15 +10,15 @@ use super::{
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Request<T: CommandType, Output> {
     // Todo: figure out better framing for sender/reciever/term, since it's not relevant to all events.
-    pub sender: u32,
-    pub reciever: u32,
+    pub sender: Id,
+    pub reciever: Id,
     pub term: u32,
     pub event: Event<T, Output>,
 }
 
 impl<T: CommandType + Send, Output: Debug + Send + 'static> Message for Request<T, Output> {
     fn recipient(&self) -> Id {
-        Id::new(self.reciever)
+        self.reciever
     }
 }
 
@@ -29,7 +29,7 @@ pub enum ActiveConfig {
 }
 
 impl ActiveConfig {
-    pub fn servers(&self) -> HashSet<u32> {
+    pub fn servers(&self) -> HashSet<Id> {
         match self {
             ActiveConfig::Stable(config) => config.servers.clone(),
             ActiveConfig::Transition { prev, new } => {
@@ -38,7 +38,7 @@ impl ActiveConfig {
         }
     }
 
-    pub fn has_quorum(&self, matching: &HashSet<u32>) -> bool {
+    pub fn has_quorum(&self, matching: &HashSet<Id>) -> bool {
         match self {
             ActiveConfig::Stable(config) => config.has_quorum(matching),
             ActiveConfig::Transition { prev, new } => {
@@ -75,7 +75,7 @@ pub struct Client<T: CommandType> {
 
 pub enum ClientResponse<T: CommandType, Output> {
     Failed {
-        leader_id: Option<u32>,
+        leader_id: Option<Id>,
         data: Data<T>,
     },
     Success {
@@ -119,9 +119,18 @@ pub mod test_util {
         ActiveConfig, Client, Crash, Data, Event, Insert, InsertResponse, Request, Tick, Vote,
         VoteResponse,
     };
-    use crate::data::{
-        data_type::CommandType,
-        persistent_state::{test_util::LOG_LEADER, Config, LogState},
+    use crate::{
+        data::{
+            data_type::CommandType,
+            persistent_state::{
+                test_util::{CONFIG, LOG_LEADER, NEW_CONFIG},
+                Config, LogState,
+            },
+        },
+        server::raft_cluster::{
+            test_util::{CLIENT_0, NONE, SERVER_0, SERVER_1},
+            Id,
+        },
     };
 
     impl<In: CommandType, Out> Request<In, Out> {
@@ -137,7 +146,7 @@ pub mod test_util {
             self
         }
 
-        pub fn set_sender(mut self, sender: u32) -> Self {
+        pub fn set_sender(mut self, sender: Id) -> Self {
             self.sender = sender;
             self
         }
@@ -147,25 +156,27 @@ pub mod test_util {
 
     pub const CRASH: Request<u32, u32> = Request {
         term: 0,
-        sender: 0,
-        reciever: 0,
+        sender: NONE,
+        reciever: NONE,
         event: Event::Crash(Crash),
     };
 
     pub const TICK: Request<u32, u32> = Request {
         term: 0,
-        sender: 0,
-        reciever: 0,
+        sender: NONE,
+        reciever: NONE,
         event: Event::Tick(Tick),
     };
 
     pub fn REQUEST_VOTES(term: u32) -> Vec<Request<u32, u32>> {
         let mut request = VOTE.reverse_sender().set_term(term);
-        (0..5)
+        CONFIG()
+            .servers
+            .iter()
             .filter(|id| !request.sender.eq(id))
             .map(|id| {
                 let mut request = request.clone();
-                request.reciever = id;
+                request.reciever = *id;
                 request
             })
             .collect()
@@ -173,8 +184,8 @@ pub mod test_util {
 
     pub const VOTE: Request<u32, u32> = Request {
         term: 4,
-        sender: 0,
-        reciever: 1,
+        sender: SERVER_0,
+        reciever: SERVER_1,
         event: Event::Vote(Vote {
             log_state: LogState { term: 3, length: 3 },
         }),
@@ -182,8 +193,8 @@ pub mod test_util {
 
     pub const VOTE_NEW_SHORT: Request<u32, u32> = Request {
         term: 4,
-        sender: 0,
-        reciever: 1,
+        sender: SERVER_0,
+        reciever: SERVER_1,
         event: Event::Vote(Vote {
             log_state: LogState { term: 4, length: 2 },
         }),
@@ -191,16 +202,16 @@ pub mod test_util {
 
     pub const VOTE_OLD_EQUAL: Request<u32, u32> = Request {
         term: 4,
-        sender: 0,
-        reciever: 1,
+        sender: SERVER_0,
+        reciever: SERVER_1,
         event: Event::Vote(Vote {
             log_state: LogState { term: 2, length: 3 },
         }),
     };
     pub const VOTE_OLD_LONG: Request<u32, u32> = Request {
         term: 4,
-        sender: 0,
-        reciever: 1,
+        sender: SERVER_0,
+        reciever: SERVER_1,
         event: Event::Vote(Vote {
             log_state: LogState { term: 2, length: 4 },
         }),
@@ -208,22 +219,22 @@ pub mod test_util {
 
     pub const VOTE_NO_RESPONSE: Request<u32, u32> = Request {
         term: 4,
-        sender: 0,
-        reciever: 1,
+        sender: SERVER_0,
+        reciever: SERVER_1,
         event: Event::VoteResponse(VoteResponse { success: false }),
     };
 
     pub const VOTE_YES_RESPONSE: Request<u32, u32> = Request {
         term: 4,
-        sender: 0,
-        reciever: 1,
+        sender: SERVER_0,
+        reciever: SERVER_1,
         event: Event::VoteResponse(VoteResponse { success: true }),
     };
 
     pub const INSERT_SUCCESS_RESPONSE: Request<u32, u32> = Request {
         term: 4,
-        sender: 0,
-        reciever: 1,
+        sender: SERVER_0,
+        reciever: SERVER_1,
         event: Event::InsertResponse(InsertResponse { success: true }),
     };
 
@@ -232,8 +243,8 @@ pub mod test_util {
         let max_prev_index = (prev_length - 1).min(log.len() - 1);
         Request {
             term: 4,
-            sender: 0,
-            reciever: 1,
+            sender: SERVER_0,
+            reciever: SERVER_1,
             event: Event::Insert(Insert {
                 prev_log_state: LogState {
                     term: log[max_prev_index].term,
@@ -246,16 +257,18 @@ pub mod test_util {
     }
 
     pub fn MASS_HEARTBEAT(term: u32) -> Vec<Request<u32, u32>> {
-        MASS_HEARTBEAT_WITH_RANGE(term, 0..5)
+        MASS_HEARTBEAT_WITH_RANGE(term, CONFIG())
     }
 
-    pub fn MASS_HEARTBEAT_WITH_RANGE(term: u32, range: Range<u32>) -> Vec<Request<u32, u32>> {
+    pub fn MASS_HEARTBEAT_WITH_RANGE(term: u32, config: Config) -> Vec<Request<u32, u32>> {
         let mut request = INSERT_HEARTBEAT.reverse_sender().set_term(term);
-        range
+        config
+            .servers
+            .iter()
             .filter(|id| !request.sender.eq(id))
             .map(|id| {
                 let mut request = request.clone();
-                request.reciever = id;
+                request.reciever = *id;
                 request
             })
             .collect()
@@ -263,8 +276,8 @@ pub mod test_util {
 
     pub const INSERT_HEARTBEAT: Request<u32, u32> = Request {
         term: 4,
-        sender: 0,
-        reciever: 1,
+        sender: SERVER_0,
+        reciever: SERVER_1,
         event: Event::Insert(Insert {
             prev_log_state: LogState { term: 3, length: 3 },
             entries: Vec::new(),
@@ -274,15 +287,15 @@ pub mod test_util {
 
     pub const INSERT_FAILED_RESPONSE: Request<u32, u32> = Request {
         term: 4,
-        sender: 0,
-        reciever: 1,
+        sender: SERVER_0,
+        reciever: SERVER_1,
         event: Event::InsertResponse(InsertResponse { success: false }),
     };
 
     pub const CLIENT_COMMAND: Request<u32, u32> = Request {
         term: 0,
-        sender: 100,
-        reciever: 1,
+        sender: CLIENT_0,
+        reciever: SERVER_1,
         event: Event::Client(Client {
             data: Data::Command(100),
         }),
@@ -290,8 +303,8 @@ pub mod test_util {
 
     pub const CLIENT_RESPONSE_NO_LEADER: Request<u32, u32> = Request {
         term: 0,
-        sender: 1,
-        reciever: 100,
+        sender: SERVER_1,
+        reciever: CLIENT_0,
         event: Event::ClientResponse(super::ClientResponse::Failed {
             leader_id: None,
             data: Data::Command(100),
@@ -300,10 +313,10 @@ pub mod test_util {
 
     pub const CLIENT_RESPONSE_WITH_LEADER: Request<u32, u32> = Request {
         term: 0,
-        sender: 1,
-        reciever: 100,
+        sender: SERVER_1,
+        reciever: CLIENT_0,
         event: Event::ClientResponse(super::ClientResponse::Failed {
-            leader_id: Some(0),
+            leader_id: Some(SERVER_0),
             data: Data::Command(100),
         }),
     };
@@ -311,12 +324,10 @@ pub mod test_util {
     pub fn CLIENT_CONFIG() -> Request<u32, u32> {
         Request {
             term: 0,
-            sender: 100,
-            reciever: 1,
+            sender: CLIENT_0,
+            reciever: SERVER_1,
             event: Event::Client(Client {
-                data: Data::Config(ActiveConfig::Stable(Config {
-                    servers: [2, 3, 4, 5, 6].into(),
-                })),
+                data: Data::Config(ActiveConfig::Stable(NEW_CONFIG())),
             }),
         }
     }

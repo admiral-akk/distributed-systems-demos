@@ -20,8 +20,8 @@ pub struct Client<T: CommandType, Output>
 where
     Request<T, Output>: Message,
 {
-    pub id: u32,
-    pub leader_id: Mutex<u32>,
+    pub id: Id,
+    pub leader_id: Mutex<Id>,
     pub input: Receiver<Request<T, Output>>,
     pub output: Sender<Request<T, Output>>,
     pub server_sender: Sender<Request<T, Output>>,
@@ -33,11 +33,11 @@ impl<T: CommandType, Output: OutputType> Client<T, Output>
 where
     Request<T, Output>: Message,
 {
-    pub async fn new(id: u32, switch: Arc<RaftCluster<Request<T, Output>>>) -> Self {
-        let (output, server_sender, input) = switch.register(Id::new(id)).await;
+    pub async fn new(id: Id, switch: Arc<RaftCluster<Request<T, Output>>>) -> Self {
+        let (output, server_sender, input) = switch.register(id).await;
         Self {
             id,
-            leader_id: Mutex::new(0),
+            leader_id: Mutex::new(Id::default()),
             input,
             output,
             server_sender,

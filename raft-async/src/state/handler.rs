@@ -1,8 +1,11 @@
-use crate::data::{
-    data_type::{CommandType, OutputType},
-    persistent_state::PersistentState,
-    request::{Event, Request},
-    volitile_state::VolitileState,
+use crate::{
+    data::{
+        data_type::{CommandType, OutputType},
+        persistent_state::PersistentState,
+        request::{Event, Request},
+        volitile_state::VolitileState,
+    },
+    server::raft_cluster::Id,
 };
 
 use super::{concrete::offline::Offline, raft_state::RaftState, state::StateMachine};
@@ -16,7 +19,7 @@ where
         _volitile_state: &mut VolitileState,
         _persistent_state: &mut PersistentState<T>,
         _state_machine: &mut SM,
-        _sender: u32,
+        _sender: Id,
         _term: u32,
         _request: Request<T, Output>,
     ) -> (Vec<Request<T, Output>>, RaftState)

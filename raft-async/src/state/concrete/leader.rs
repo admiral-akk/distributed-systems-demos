@@ -7,6 +7,7 @@ use crate::{
         request::{ActiveConfig, Client, ClientResponse, Event, InsertResponse, Request, Tick},
         volitile_state::VolitileState,
     },
+    server::raft_cluster::Id,
     state::state::StateMachine,
 };
 use crate::{
@@ -21,8 +22,8 @@ use super::{candidate::Candidate, follower::Follower};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Leader {
-    pub next_index: HashMap<u32, usize>,
-    pub match_index: HashMap<u32, usize>,
+    pub next_index: HashMap<Id, usize>,
+    pub match_index: HashMap<Id, usize>,
 }
 
 impl Leader {
@@ -69,7 +70,7 @@ impl Leader {
         &self,
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
-        server: u32,
+        server: Id,
     ) -> Request<T, Output> {
         Request {
             sender: persistent_state.id,
@@ -90,7 +91,7 @@ impl Leader {
     ) -> (Vec<Request<T, Output>>, RaftState) {
         persistent_state.current_term += 1;
         volitile_state.tick_since_start = 0;
-        println!("{} elected leader!", persistent_state.id);
+        println!("{:?} elected leader!", persistent_state.id);
 
         let latest_config = persistent_state
             .latest_config(volitile_state.commit_index)
@@ -125,7 +126,7 @@ impl EventHandler for Leader {
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         state_machine: &mut SM,
-        sender: u32,
+        sender: Id,
         _term: u32,
         request: Request<T, Output>,
     ) -> (Vec<Request<T, Output>>, RaftState)
@@ -212,35 +213,40 @@ impl EventHandler for Leader {
 
 #[cfg(test)]
 pub mod test_util {
-    use std::ops::Range;
+    use std::{collections::HashSet, ops::Range};
 
     use super::Leader;
-    use crate::state::raft_state::RaftState;
+    use crate::{
+        data::persistent_state::test_util::CONFIG,
+        server::raft_cluster::{test_util::SERVER_1, Id},
+        state::raft_state::RaftState,
+    };
 
     pub fn BASE_LEADER(log_length: usize, match_index: usize) -> RaftState {
-        BASE_LEADER_WITH_RANGE(log_length, match_index, 0..5)
+        BASE_LEADER_WITH_RANGE(log_length, match_index, CONFIG().servers)
     }
 
     pub fn BASE_LEADER_WITH_RANGE(
         log_length: usize,
         match_index: usize,
-        range: Range<u32>,
+        servers: HashSet<Id>,
     ) -> RaftState {
         RaftState::Leader(super::Leader {
-            next_index: range
-                .clone()
-                .filter(|id| *id != 1)
-                .map(|id| (id, log_length))
+            next_index: servers
+                .iter()
+                .filter(|id| !(*id).eq(&SERVER_1))
+                .map(|id| (*id, log_length))
                 .collect(),
-            match_index: range
-                .filter(|id| *id != 1)
-                .map(|id| (id, match_index))
+            match_index: servers
+                .iter()
+                .filter(|id| !(*id).eq(&SERVER_1))
+                .map(|id| (*id, match_index))
                 .collect(),
         })
     }
 
     impl RaftState {
-        pub fn set_next_index(mut self, id: u32, index: usize) -> Self {
+        pub fn set_next_index(mut self, id: Id, index: usize) -> Self {
             match &mut self {
                 RaftState::Leader(Leader { next_index, .. }) => {
                     next_index.insert(id, index);
@@ -249,7 +255,7 @@ pub mod test_util {
             }
             self
         }
-        pub fn set_match_index(mut self, id: u32, index: usize) -> Self {
+        pub fn set_match_index(mut self, id: Id, index: usize) -> Self {
             match &mut self {
                 RaftState::Leader(Leader { match_index, .. }) => {
                     match_index.insert(id, index);
@@ -264,11 +270,12 @@ pub mod test_util {
 #[cfg(test)]
 mod tests {
     use crate::data::persistent_state::test_util::{
-        LOG, LOG_TRANSITION_STABLE_CONFIG, LOG_WITH_CLIENT,
+        JOINT_CONFIG, LOG_TRANSITION_STABLE_CONFIG, LOG_WITH_CLIENT,
     };
     use crate::data::request::test_util::{
         CLIENT_COMMAND, INSERT_FAILED_RESPONSE, INSERT_SUCCESS_RESPONSE, MASS_HEARTBEAT, TICK,
     };
+    use crate::server::raft_cluster::test_util::{SERVER_0, SERVER_4, SERVER_5, SERVER_6};
     use crate::state::concrete::follower::test_util::FOLLOWER;
     use crate::state::concrete::leader::test_util::BASE_LEADER;
     use crate::state::state::test_util::TestCase;
@@ -287,23 +294,25 @@ mod tests {
 
     #[test]
     fn test_append_response_success() {
-        let state = State::create_state(BASE_LEADER(3, 2)).set_next_index(0, 2);
+        let state = State::create_state(BASE_LEADER(3, 2)).set_next_index(SERVER_0, 2);
         let mut test_case = TestCase::new(state, INSERT_SUCCESS_RESPONSE)
-            .set_rs(BASE_LEADER(3, 2).set_match_index(0, 3));
+            .set_rs(BASE_LEADER(3, 2).set_match_index(SERVER_0, 3));
         test_case.run();
     }
 
     #[test]
     fn test_append_response_succeeds_up_to_date() {
         let state = State::create_state(BASE_LEADER(3, 2));
-        let mut test_case = TestCase::new(state, INSERT_SUCCESS_RESPONSE).set_match_index(0, 3);
+        let mut test_case =
+            TestCase::new(state, INSERT_SUCCESS_RESPONSE).set_match_index(SERVER_0, 3);
         test_case.run();
     }
 
     #[test]
     fn test_append_response_fails() {
         let state = State::create_state(BASE_LEADER(3, 2));
-        let mut test_case = TestCase::new(state, INSERT_FAILED_RESPONSE).set_next_index(0, 2);
+        let mut test_case =
+            TestCase::new(state, INSERT_FAILED_RESPONSE).set_next_index(SERVER_0, 2);
         test_case.run();
     }
 
@@ -317,35 +326,36 @@ mod tests {
     #[test]
     fn test_new_config_commit_no_quorum() {
         let state = State::create_state(
-            BASE_LEADER_WITH_RANGE(3, 3, 0..7)
-                .set_match_index(0, 2)
-                .set_match_index(4, 2)
-                .set_match_index(5, 2)
-                .set_match_index(6, 2),
+            BASE_LEADER_WITH_RANGE(3, 3, JOINT_CONFIG().servers)
+                .set_match_index(SERVER_0, 2)
+                .set_match_index(SERVER_4, 2)
+                .set_match_index(SERVER_5, 2)
+                .set_match_index(SERVER_6, 2),
         )
         .set_log(LOG_TRANSITION_STABLE_CONFIG());
-        let mut test_case = TestCase::new(state, INSERT_SUCCESS_RESPONSE).set_match_index(0, 3);
+        let mut test_case =
+            TestCase::new(state, INSERT_SUCCESS_RESPONSE).set_match_index(SERVER_0, 3);
         test_case.run();
     }
 
     #[test]
     fn test_new_config_commit_with_quorum() {
         let state = State::create_state(
-            BASE_LEADER_WITH_RANGE(3, 3, 0..7)
-                .set_match_index(0, 2)
-                .set_match_index(5, 2)
-                .set_match_index(6, 2),
+            BASE_LEADER_WITH_RANGE(3, 3, JOINT_CONFIG().servers)
+                .set_match_index(SERVER_0, 2)
+                .set_match_index(SERVER_5, 2)
+                .set_match_index(SERVER_6, 2),
         )
         .set_log(LOG_TRANSITION_STABLE_CONFIG());
-        let mut test_case = TestCase::new(state, INSERT_SUCCESS_RESPONSE.set_sender(6))
-            .set_match_index(6, 3)
+        let mut test_case = TestCase::new(state, INSERT_SUCCESS_RESPONSE.set_sender(SERVER_6))
+            .set_match_index(SERVER_6, 3)
             .set_commit(3);
         test_case.run();
     }
 
     #[test]
     fn test_new_config_demotion() {
-        let state = State::create_state(BASE_LEADER_WITH_RANGE(3, 3, 0..7))
+        let state = State::create_state(BASE_LEADER_WITH_RANGE(3, 3, JOINT_CONFIG().servers))
             .set_commit(3)
             .set_log(LOG_TRANSITION_STABLE_CONFIG());
         let mut test_case = TestCase::new(state, TICK).set_rs(FOLLOWER).increment_tick();

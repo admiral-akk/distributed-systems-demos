@@ -5,6 +5,7 @@ use crate::{
         request::{Event, Request, Tick},
         volitile_state::VolitileState,
     },
+    server::raft_cluster::Id,
     state::{
         handler::{EventHandler, Handler},
         raft_state::RaftState,
@@ -27,7 +28,7 @@ impl EventHandler for Offline {
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         _state_machine: &mut SM,
-        _sender: u32,
+        _sender: Id,
         _term: u32,
         request: Request<T, Output>,
     ) -> (Vec<Request<T, Output>>, RaftState)

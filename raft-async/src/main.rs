@@ -3,7 +3,7 @@ use std::time::Duration;
 use async_std::sync::Arc;
 
 use async_std::task;
-use data::{persistent_state::Config, request::Request};
+use data::request::Request;
 use rand::Rng;
 use server::{client::Client, raft_cluster::RaftCluster};
 use state::state::StateMachine;
@@ -40,18 +40,8 @@ impl DataGenerator<u32> for RandNum {
 }
 
 fn main() {
-    let initial_config = Config {
-        servers: [0, 1, 2, 3, 4].into(),
-    };
-    let switch: Arc<RaftCluster<Request<u32, u32>>> = RaftCluster::init::<Sum>(initial_config);
-    let clients = (10..12)
-        .map(|id| Client::<u32, u32>::new(id, switch.clone()))
-        .map(|client| Arc::new(task::block_on(client)))
-        .collect::<Vec<_>>();
-
-    for client in clients {
-        Client::init::<RandNum>(client);
-    }
+    let switch: Arc<RaftCluster<Request<u32, u32>>> = RaftCluster::init::<Sum>(5);
+    RaftCluster::add_client::<RandNum>(switch);
 
     task::block_on(task::spawn(async {
         loop {

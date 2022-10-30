@@ -1,10 +1,6 @@
 use std::collections::HashSet;
 
 use super::{follower::Follower, leader::Leader};
-use crate::state::{
-    handler::{EventHandler, Handler},
-    raft_state::RaftState,
-};
 use crate::{
     data::{
         data_type::CommandType,
@@ -14,10 +10,17 @@ use crate::{
     },
     state::state::StateMachine,
 };
+use crate::{
+    server::raft_cluster::Id,
+    state::{
+        handler::{EventHandler, Handler},
+        raft_state::RaftState,
+    },
+};
 
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct Candidate {
-    votes: HashSet<u32>,
+    votes: HashSet<Id>,
 }
 const TICK_TILL_NEW_ELECTION: u32 = 10;
 
@@ -28,7 +31,7 @@ impl EventHandler for Candidate {
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         _state_machine: &mut SM,
-        sender: u32,
+        sender: Id,
         term: u32,
         request: Request<T, Output>,
     ) -> (Vec<Request<T, Output>>, RaftState)
@@ -57,7 +60,7 @@ impl EventHandler for Candidate {
             }
             Event::VoteResponse(VoteResponse { success }) => {
                 if success {
-                    println!("{} voted for {}", sender, persistent_state.id);
+                    println!("{:?} voted for {:?}", sender, persistent_state.id);
                     self.votes.insert(sender);
                 }
                 if persistent_state.has_quorum(volitile_state.commit_index, &self.votes) {
@@ -92,7 +95,7 @@ impl Candidate {
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
     ) -> (Vec<Request<T, Output>>, RaftState) {
-        println!("{} running for office!", persistent_state.id);
+        println!("{:?} running for office!", persistent_state.id);
         persistent_state.current_term += 1;
         persistent_state.voted_for = Some(persistent_state.id);
         volitile_state.tick_since_start = 0;
@@ -108,13 +111,18 @@ impl Candidate {
 #[cfg(test)]
 pub mod test_util {
     use super::Candidate;
-    use crate::state::raft_state::RaftState;
+    use crate::{
+        server::raft_cluster::{test_util::SERVER_1, Id},
+        state::raft_state::RaftState,
+    };
 
     pub fn BASE_CANDIDATE() -> RaftState {
-        RaftState::Candidate(Candidate { votes: [1].into() })
+        RaftState::Candidate(Candidate {
+            votes: [SERVER_1].into(),
+        })
     }
 
-    pub fn CANDIDATE(votes: &[u32]) -> RaftState {
+    pub fn CANDIDATE(votes: &[Id]) -> RaftState {
         RaftState::Candidate(Candidate {
             votes: votes.iter().map(|id| *id).collect(),
         })
@@ -125,13 +133,16 @@ pub mod test_util {
 mod tests {
     use super::test_util::BASE_CANDIDATE;
     use crate::data::persistent_state::test_util::{
-        LOG_TRANSITION_CONFIG, LOG_TRANSITION_STABLE_CONFIG,
+        JOINT_CONFIG, LOG_TRANSITION_CONFIG, LOG_TRANSITION_STABLE_CONFIG,
     };
     use crate::data::request::test_util::{
         INSERT, MASS_HEARTBEAT, MASS_HEARTBEAT_WITH_RANGE, REQUEST_VOTES, TICK, VOTE_NO_RESPONSE,
         VOTE_YES_RESPONSE,
     };
     use crate::data::volitile_state::test_util::{VOLITILE_STATE, VOLITILE_STATE_TIMEOUT};
+    use crate::server::raft_cluster::test_util::{
+        SERVER_0, SERVER_1, SERVER_2, SERVER_3, SERVER_4,
+    };
     use crate::state::concrete::candidate::test_util::CANDIDATE;
     use crate::state::concrete::follower::test_util::FOLLOWER;
     use crate::state::concrete::leader::test_util::{BASE_LEADER, BASE_LEADER_WITH_RANGE};
@@ -140,7 +151,7 @@ mod tests {
 
     #[test]
     fn test_tick() {
-        let state = State::create_state(BASE_CANDIDATE()).set_voted(1);
+        let state = State::create_state(BASE_CANDIDATE()).set_voted(SERVER_1);
         let mut test_case = TestCase::new(state, TICK)
             .set_vs(VOLITILE_STATE.increment_tick())
             .responses(&REQUEST_VOTES(4));
@@ -151,7 +162,7 @@ mod tests {
     fn test_timeout() {
         let state = State::create_state(BASE_CANDIDATE())
             .set_vs(VOLITILE_STATE_TIMEOUT)
-            .set_voted(1);
+            .set_voted(SERVER_1);
         let mut test_case = TestCase::new(state, TICK)
             .set_vs(VOLITILE_STATE)
             .set_term(5)
@@ -161,28 +172,29 @@ mod tests {
 
     #[test]
     fn test_request_vote_rejection() {
-        let state = State::create_state(BASE_CANDIDATE()).set_voted(1);
+        let state = State::create_state(BASE_CANDIDATE()).set_voted(SERVER_1);
         let mut test_case = TestCase::new(state, VOTE_NO_RESPONSE);
         test_case.run();
     }
 
     #[test]
     fn test_request_vote_successful() {
-        let state = State::create_state(BASE_CANDIDATE()).set_voted(1);
-        let mut test_case = TestCase::new(state, VOTE_YES_RESPONSE).set_rs(CANDIDATE(&[0, 1]));
+        let state = State::create_state(BASE_CANDIDATE()).set_voted(SERVER_1);
+        let mut test_case =
+            TestCase::new(state, VOTE_YES_RESPONSE).set_rs(CANDIDATE(&[SERVER_0, SERVER_1]));
         test_case.run();
     }
 
     #[test]
     fn test_request_vote_successful_redundant() {
-        let state = State::create_state(CANDIDATE(&[0, 1])).set_voted(1);
+        let state = State::create_state(CANDIDATE(&[SERVER_0, SERVER_1])).set_voted(SERVER_1);
         let mut test_case = TestCase::new(state, VOTE_YES_RESPONSE);
         test_case.run();
     }
 
     #[test]
     fn test_request_vote_successful_elected() {
-        let state = State::create_state(CANDIDATE(&[1, 2])).set_voted(1);
+        let state = State::create_state(CANDIDATE(&[SERVER_1, SERVER_2])).set_voted(SERVER_1);
         let mut test_case = TestCase::new(state, VOTE_YES_RESPONSE)
             .set_rs(BASE_LEADER(3, 0))
             .set_term(5)
@@ -192,40 +204,41 @@ mod tests {
 
     #[test]
     fn test_request_vote_missing_joint_quorum() {
-        let state = State::create_state(CANDIDATE(&[1, 2]))
-            .set_voted(1)
+        let state = State::create_state(CANDIDATE(&[SERVER_1, SERVER_2]))
+            .set_voted(SERVER_1)
             .set_log(LOG_TRANSITION_CONFIG());
-        let mut test_case = TestCase::new(state, VOTE_YES_RESPONSE).set_rs(CANDIDATE(&[0, 1, 2]));
+        let mut test_case = TestCase::new(state, VOTE_YES_RESPONSE)
+            .set_rs(CANDIDATE(&[SERVER_0, SERVER_1, SERVER_2]));
         test_case.run();
     }
 
     #[test]
     fn test_request_vote_successful_elected_joint_quorum() {
-        let state = State::create_state(CANDIDATE(&[1, 2, 3, 4]))
+        let state = State::create_state(CANDIDATE(&[SERVER_1, SERVER_2, SERVER_3, SERVER_4]))
             .set_term(2)
-            .set_voted(1)
+            .set_voted(SERVER_1)
             .set_log(LOG_TRANSITION_CONFIG());
         let mut test_case = TestCase::new(state, VOTE_YES_RESPONSE.set_term(2))
-            .set_rs(BASE_LEADER_WITH_RANGE(3, 0, 0..7))
+            .set_rs(BASE_LEADER_WITH_RANGE(3, 0, JOINT_CONFIG().servers))
             .set_log(LOG_TRANSITION_STABLE_CONFIG())
             .set_term(3)
-            .responses(&MASS_HEARTBEAT_WITH_RANGE(3, 0..7));
+            .responses(&MASS_HEARTBEAT_WITH_RANGE(3, JOINT_CONFIG()));
         test_case.run();
     }
 
     #[test]
     fn test_append_old_leader() {
-        let state = State::create_state(CANDIDATE(&[1])).set_voted(1);
+        let state = State::create_state(CANDIDATE(&[SERVER_1])).set_voted(SERVER_1);
         let mut test_case = TestCase::new(state, INSERT(4).set_term(2));
         test_case.run();
     }
 
     #[test]
     fn test_append_current_leader() {
-        let state = State::create_state(CANDIDATE(&[1])).set_voted(1);
+        let state = State::create_state(CANDIDATE(&[SERVER_1])).set_voted(SERVER_1);
         let mut test_case = TestCase::new(state, INSERT(4).set_term(4))
             .set_rs(FOLLOWER)
-            .set_voted(0);
+            .set_voted(SERVER_0);
         test_case.run();
     }
 }

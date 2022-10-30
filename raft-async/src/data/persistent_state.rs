@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+use crate::server::raft_cluster::Id;
+
 use super::{
     data_type::CommandType,
     request::{ActiveConfig, Data, Event, Insert, Vote},
@@ -7,11 +9,11 @@ use super::{
 
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct Config {
-    pub servers: HashSet<u32>,
+    pub servers: HashSet<Id>,
 }
 
 impl Config {
-    pub fn has_quorum(&self, votes: &HashSet<u32>) -> bool {
+    pub fn has_quorum(&self, votes: &HashSet<Id>) -> bool {
         self.servers.intersection(votes).count() >= self.servers.len() / 2 + 1
     }
 }
@@ -40,9 +42,9 @@ impl<T: Clone> Entry<T> {
 
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct PersistentState<T: Clone> {
-    pub id: u32,
+    pub id: Id,
     pub current_term: u32,
-    pub voted_for: Option<u32>,
+    pub voted_for: Option<Id>,
     pub log: Vec<Entry<T>>,
 }
 
@@ -58,7 +60,7 @@ pub struct LatestConfig {
 }
 
 impl LatestConfig {
-    pub fn servers(&self) -> HashSet<u32> {
+    pub fn servers(&self) -> HashSet<Id> {
         match &self.config {
             ActiveConfig::Stable(config) => config.servers.clone(),
             ActiveConfig::Transition { prev, new } => {
@@ -91,7 +93,7 @@ impl<T: CommandType> PersistentState<T> {
         (prev, next)
     }
 
-    pub fn has_quorum(&self, commit_index: usize, matching: &HashSet<u32>) -> bool {
+    pub fn has_quorum(&self, commit_index: usize, matching: &HashSet<Id>) -> bool {
         let (prev, latest) = self.latest_config(commit_index);
         match (prev, &latest) {
             (
@@ -106,7 +108,7 @@ impl<T: CommandType> PersistentState<T> {
             _ => latest.config.has_quorum(matching),
         }
     }
-    pub fn servers(&self, commit_index: usize) -> HashSet<u32> {
+    pub fn servers(&self, commit_index: usize) -> HashSet<Id> {
         let (prev, latest) = self.latest_config(commit_index);
         match (&prev, &latest) {
             (
@@ -126,7 +128,7 @@ impl<T: CommandType> PersistentState<T> {
         .servers()
     }
 
-    pub fn other_servers(&self, commit_index: usize) -> Vec<u32> {
+    pub fn other_servers(&self, commit_index: usize) -> Vec<Id> {
         let (prev, latest) = self.latest_config(commit_index);
         match (&prev, &latest) {
             (
@@ -198,7 +200,7 @@ impl<T: CommandType> PersistentState<T> {
         true
     }
 
-    pub fn try_vote_for(&mut self, event: Vote, id: u32) -> bool {
+    pub fn try_vote_for(&mut self, event: Vote, id: Id) -> bool {
         if let Some(voted_for) = self.voted_for {
             return voted_for == id;
         }
@@ -237,12 +239,18 @@ impl<T: CommandType> PersistentState<T> {
 
 #[cfg(test)]
 pub mod test_util {
-    use crate::data::request::{ActiveConfig, Data};
+    use crate::{
+        data::request::{ActiveConfig, Data},
+        server::raft_cluster::{
+            test_util::{SERVER_0, SERVER_1, SERVER_2, SERVER_3, SERVER_4, SERVER_5, SERVER_6},
+            Id,
+        },
+    };
 
     use super::{Config, Entry, PersistentState};
 
     impl<T: Clone> PersistentState<T> {
-        pub fn set_voted(mut self, voted_for: u32) -> Self {
+        pub fn set_voted(mut self, voted_for: Id) -> Self {
             self.voted_for = Some(voted_for);
             self
         }
@@ -255,12 +263,20 @@ pub mod test_util {
 
     pub fn CONFIG() -> Config {
         Config {
-            servers: [0, 1, 2, 3, 4].into(),
+            servers: [SERVER_0, SERVER_1, SERVER_2, SERVER_3, SERVER_4].into(),
         }
     }
     pub fn NEW_CONFIG() -> Config {
         Config {
-            servers: [2, 3, 4, 5, 6].into(),
+            servers: [SERVER_2, SERVER_3, SERVER_4, SERVER_5, SERVER_6].into(),
+        }
+    }
+    pub fn JOINT_CONFIG() -> Config {
+        Config {
+            servers: [
+                SERVER_0, SERVER_1, SERVER_2, SERVER_3, SERVER_4, SERVER_5, SERVER_6,
+            ]
+            .into(),
         }
     }
 
@@ -337,7 +353,7 @@ pub mod test_util {
 
     pub fn PERSISTENT_STATE() -> PersistentState<u32> {
         PersistentState {
-            id: 1,
+            id: SERVER_1,
             current_term: 4,
             voted_for: None,
             log: LOG(),
@@ -346,16 +362,16 @@ pub mod test_util {
 
     pub fn PERSISTENT_STATE_LOG(log: Vec<Entry<u32>>) -> PersistentState<u32> {
         PersistentState {
-            id: 1,
+            id: SERVER_1,
             current_term: 4,
             voted_for: None,
             log,
         }
     }
 
-    pub fn PERSISTENT_STATE_VOTED(id: u32) -> PersistentState<u32> {
+    pub fn PERSISTENT_STATE_VOTED(id: Id) -> PersistentState<u32> {
         PersistentState {
-            id: 1,
+            id: SERVER_1,
             current_term: 4,
             voted_for: Some(id),
             log: LOG(),

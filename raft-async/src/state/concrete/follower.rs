@@ -5,6 +5,7 @@ use crate::{
         request::{ClientResponse, Event, InsertResponse, Request, Tick, VoteResponse},
         volitile_state::VolitileState,
     },
+    server::raft_cluster::Id,
     state::{
         handler::{EventHandler, Handler},
         raft_state::RaftState,
@@ -24,7 +25,7 @@ impl EventHandler for Follower {
         volitile_state: &mut VolitileState,
         persistent_state: &mut PersistentState<T>,
         state_machine: &mut SM,
-        sender: u32,
+        sender: Id,
         term: u32,
         request: Request<T, Output>,
     ) -> (Vec<Request<T, Output>>, RaftState)
@@ -33,7 +34,7 @@ impl EventHandler for Follower {
     {
         match request.event {
             Event::Vote(event) => {
-                println!("{} requested vote from {}", sender, persistent_state.id);
+                println!("{:?} requested vote from {:?}", sender, persistent_state.id);
                 let mut success = persistent_state.current_term <= term;
                 if success {
                     success &= persistent_state.try_vote_for(event, sender);
@@ -120,6 +121,7 @@ mod tests {
         VOTE_NO_RESPONSE, VOTE_OLD_EQUAL, VOTE_OLD_LONG, VOTE_YES_RESPONSE,
     };
     use crate::data::volitile_state::test_util::{VOLITILE_STATE, VOLITILE_STATE_TIMEOUT};
+    use crate::server::raft_cluster::test_util::{SERVER_0, SERVER_1};
     use crate::state::concrete::candidate::test_util::BASE_CANDIDATE;
     use crate::state::concrete::follower::test_util::FOLLOWER;
     use crate::state::state::test_util::TestCase;
@@ -140,7 +142,7 @@ mod tests {
         let mut test_case = TestCase::new(state, TICK)
             .set_rs(BASE_CANDIDATE())
             .set_vs(VOLITILE_STATE)
-            .set_ps(PERSISTENT_STATE().increment_term().set_voted(1))
+            .set_ps(PERSISTENT_STATE().increment_term().set_voted(SERVER_1))
             .responses(&REQUEST_VOTES(5));
         test_case.run();
     }
@@ -158,7 +160,7 @@ mod tests {
         let state = State::create_state(FOLLOWER);
         let mut test_case = TestCase::new(state, INSERT(4))
             .responses(&[INSERT_FAILED_RESPONSE.reverse_sender()])
-            .set_voted(0);
+            .set_voted(SERVER_0);
         test_case.run();
     }
 
@@ -167,7 +169,7 @@ mod tests {
         let state = State::create_state(FOLLOWER).set_log(MISMATCH_LOG());
         let mut test_case = TestCase::new(state, INSERT(3))
             .responses(&[INSERT_FAILED_RESPONSE.reverse_sender()])
-            .set_voted(0);
+            .set_voted(SERVER_0);
         test_case.run();
     }
 
@@ -177,7 +179,7 @@ mod tests {
         let mut test_case = TestCase::new(state, INSERT(3))
             .responses(&[INSERT_SUCCESS_RESPONSE.reverse_sender()])
             .set_log(LOG_LEADER()[0..4].into())
-            .set_voted(0)
+            .set_voted(SERVER_0)
             .set_commit(4)
             .set_sum(19);
         test_case.run();
@@ -189,7 +191,7 @@ mod tests {
         let mut test_case = TestCase::new(state, INSERT(2))
             .responses(&[INSERT_SUCCESS_RESPONSE.reverse_sender()])
             .set_log(LOG())
-            .set_voted(0)
+            .set_voted(SERVER_0)
             .set_commit(3)
             .set_sum(14);
         test_case.run();
@@ -224,7 +226,7 @@ mod tests {
         let state = State::create_state(FOLLOWER);
         let mut test_case = TestCase::new(state, VOTE)
             .responses(&[VOTE_YES_RESPONSE.reverse_sender()])
-            .set_voted(0);
+            .set_voted(SERVER_0);
         test_case.run();
     }
 
@@ -233,13 +235,13 @@ mod tests {
         let state = State::create_state(FOLLOWER);
         let mut test_case = TestCase::new(state, VOTE_OLD_LONG)
             .responses(&[VOTE_YES_RESPONSE.reverse_sender()])
-            .set_voted(0);
+            .set_voted(SERVER_0);
         test_case.run();
     }
 
     #[test]
     fn test_client_request() {
-        let state = State::create_state(FOLLOWER).set_voted(0);
+        let state = State::create_state(FOLLOWER).set_voted(SERVER_0);
         let mut test_case =
             TestCase::new(state, CLIENT_COMMAND).responses(&[CLIENT_RESPONSE_WITH_LEADER]);
         test_case.run();
