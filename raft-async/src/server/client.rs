@@ -39,7 +39,7 @@ where
         Self {
             id,
             transactions: Default::default(),
-            leader_id: Mutex::new(Id::default()),
+            leader_id: Mutex::new(Id::Server(0)),
             input,
             output,
             server_sender,
@@ -84,11 +84,16 @@ where
             if let Ok(request) = request {
                 match request.event {
                     Event::ClientResponse(r) => match r {
-                        ClientResponse::Failed { leader_id, data } => {
+                        ClientResponse::Failed {
+                            id,
+                            leader_id,
+                            data,
+                        } => {
                             if let Some(leader_id) = leader_id {
                                 {
                                     *client.leader_id.lock().await = leader_id;
                                 }
+                                println!("Transaction id failed: {:?}", id);
                                 let response = Request {
                                     sender: client.id,
                                     reciever: leader_id,

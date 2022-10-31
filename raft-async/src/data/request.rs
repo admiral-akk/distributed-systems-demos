@@ -107,10 +107,12 @@ pub enum ResponseEvent<T: CommandType, Output> {
 
 pub enum ClientResponse<T: CommandType, Output> {
     Failed {
+        id: TransactionId,
         leader_id: Option<Id>,
         data: ClientData<T>,
     },
     Success {
+        id: TransactionId,
         data: Output,
     },
 }
@@ -343,6 +345,7 @@ pub mod test_util {
         reciever: CLIENT_0,
         event: Event::ClientResponse(super::ClientResponse::Failed {
             leader_id: None,
+            id: TRANSACTION_ID_1,
             data: ClientData::Command(100),
         }),
     };
@@ -353,6 +356,7 @@ pub mod test_util {
         reciever: CLIENT_0,
         event: Event::ClientResponse(super::ClientResponse::Failed {
             leader_id: Some(SERVER_0),
+            id: TRANSACTION_ID_1,
             data: ClientData::Command(100),
         }),
     };

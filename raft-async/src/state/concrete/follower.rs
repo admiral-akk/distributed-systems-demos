@@ -92,6 +92,7 @@ impl EventHandler for Follower {
                     reciever: sender,
                     term: 0,
                     event: Event::ClientResponse(ClientResponse::Failed {
+                        id: event.id,
                         leader_id: persistent_state.voted_for,
                         data: event.data,
                     }),

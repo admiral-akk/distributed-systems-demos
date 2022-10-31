@@ -176,6 +176,7 @@ impl EventHandler for Leader {
                                         reciever: sender,
                                         term: 0,
                                         event: Event::ClientResponse(ClientResponse::Failed {
+                                            id,
                                             leader_id: Some(persistent_state.id),
                                             data,
                                         }),
