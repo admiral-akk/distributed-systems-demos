@@ -6,6 +6,7 @@ use crate::{
         persistent_state::{Entry, LatestConfig, PersistentState},
         request::{
             ActiveConfig, Client, ClientData, ClientResponse, Event, InsertResponse, Request, Tick,
+            Transaction,
         },
         volitile_state::VolitileState,
     },
@@ -49,10 +50,11 @@ impl Leader {
             }
 
             if let ActiveConfig::Transition { new, .. } = latest_config.config {
-                persistent_state.log.push(Entry {
-                    term: persistent_state.current_term,
-                    data: Data::Config(ActiveConfig::Stable(new.clone())),
-                });
+                persistent_state.log.push(Entry::stable_config(
+                    persistent_state.current_term,
+                    latest_config.transaction_id,
+                    new.clone(),
+                ));
             }
         }
 
@@ -102,10 +104,11 @@ impl Leader {
         // If we recently committed a configuration that removes this server, it demotes itself.
         if latest_config.committed {
             if let ActiveConfig::Transition { new, .. } = latest_config.config {
-                persistent_state.log.push(Entry {
-                    term: persistent_state.current_term,
-                    data: Data::Config(ActiveConfig::Stable(new.clone())),
-                });
+                persistent_state.log.push(Entry::stable_config(
+                    persistent_state.current_term,
+                    latest_config.transaction_id,
+                    new.clone(),
+                ));
             }
         }
         let other_servers = persistent_state.other_servers(volitile_state.commit_index);
@@ -140,7 +143,10 @@ impl EventHandler for Leader {
                 // If we are not in a stable config state, we cannot transition.
                 match &data {
                     ClientData::Command(command) => {
-                        persistent_state.push(Data::Command(command.clone()));
+                        persistent_state.push(Transaction {
+                            id,
+                            data: Data::Command(command.clone()),
+                        });
                         (Vec::new(), self.into())
                     }
                     ClientData::Config(config) => {
@@ -149,11 +155,17 @@ impl EventHandler for Leader {
                             .1;
                         match latest_config {
                             LatestConfig {
-                                config: ActiveConfig::Stable(_),
+                                config: ActiveConfig::Stable(old_config),
                                 committed: true,
+                                ..
                             } => {
-                                persistent_state
-                                    .push(Data::Config(ActiveConfig::Stable(config.clone())));
+                                persistent_state.push(Transaction {
+                                    id,
+                                    data: Data::Config(ActiveConfig::Transition {
+                                        prev: old_config.clone(),
+                                        new: config.clone(),
+                                    }),
+                                });
                                 (Vec::new(), self.into())
                             }
                             _ => {

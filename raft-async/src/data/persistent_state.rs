@@ -4,7 +4,7 @@ use crate::server::raft_cluster::Id;
 
 use super::{
     data_type::CommandType,
-    request::{ActiveConfig, Data, Event, Insert, Vote},
+    request::{ActiveConfig, Data, Event, Insert, Transaction, TransactionId, Vote},
 };
 
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
@@ -21,21 +21,36 @@ impl Config {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Entry<T: Clone> {
     pub term: u32,
-    pub data: Data<T>,
+    pub data: Transaction<T>,
 }
 
 impl<T: Clone> Entry<T> {
-    pub fn command(term: u32, data: T) -> Self {
+    pub fn command(term: u32, id: TransactionId, data: T) -> Self {
         Entry {
             term,
-            data: Data::Command(data),
+            data: Transaction {
+                id,
+                data: Data::Command(data),
+            },
+        }
+    }
+    pub fn transition_config(term: u32, id: TransactionId, prev: Config, new: Config) -> Self {
+        Entry {
+            term,
+            data: Transaction {
+                id,
+                data: Data::Config(ActiveConfig::Transition { prev, new }),
+            },
         }
     }
 
-    pub fn config(term: u32, config: Config) -> Self {
+    pub fn stable_config(term: u32, id: TransactionId, config: Config) -> Self {
         Entry {
             term,
-            data: Data::Config(ActiveConfig::Stable(config)),
+            data: Transaction {
+                id,
+                data: Data::Config(ActiveConfig::Stable(config)),
+            },
         }
     }
 }
@@ -56,6 +71,7 @@ pub struct LogState {
 
 pub struct LatestConfig {
     pub config: ActiveConfig,
+    pub transaction_id: TransactionId,
     pub committed: bool,
 }
 
@@ -77,14 +93,15 @@ impl<T: CommandType> PersistentState<T> {
             .iter()
             .enumerate()
             .rev()
-            .filter(|(_i, entry)| match entry.data {
+            .filter(|(_i, entry)| match entry.data.data {
                 Data::Command(_) => false,
                 Data::Config(_) => true,
             })
-            .map(|(i, entry)| match &entry.data {
+            .map(|(i, entry)| match &entry.data.data {
                 Data::Config(config) => LatestConfig {
                     config: config.clone(),
                     committed: i < commit_index,
+                    transaction_id: entry.data.id,
                 },
                 _ => panic!(),
             });
@@ -100,6 +117,7 @@ impl<T: CommandType> PersistentState<T> {
                 Some(LatestConfig {
                     config,
                     committed: true,
+                    ..
                 }),
                 LatestConfig {
                     committed: false, ..
@@ -118,6 +136,7 @@ impl<T: CommandType> PersistentState<T> {
                 LatestConfig {
                     committed: false,
                     config: latest,
+                    ..
                 },
             ) => match latest {
                 ActiveConfig::Stable(_) => previous,
@@ -138,6 +157,7 @@ impl<T: CommandType> PersistentState<T> {
                 LatestConfig {
                     committed: false,
                     config: latest,
+                    ..
                 },
             ) => match latest {
                 ActiveConfig::Stable(_) => previous,
@@ -151,7 +171,7 @@ impl<T: CommandType> PersistentState<T> {
         .collect()
     }
 
-    pub fn push(&mut self, data: Data<T>) {
+    pub fn push(&mut self, data: Transaction<T>) {
         self.log.push(Entry {
             term: self.current_term,
             data,
@@ -240,7 +260,10 @@ impl<T: CommandType> PersistentState<T> {
 #[cfg(test)]
 pub mod test_util {
     use crate::{
-        data::request::{ActiveConfig, Data},
+        data::request::{
+            test_util::{TRANSACTION_ID_1, TRANSACTION_ID_2, TRANSACTION_ID_NONE},
+            ActiveConfig, Data, Transaction,
+        },
         server::raft_cluster::{
             test_util::{SERVER_0, SERVER_1, SERVER_2, SERVER_3, SERVER_4, SERVER_5, SERVER_6},
             Id,
@@ -282,37 +305,16 @@ pub mod test_util {
 
     pub fn LOG_TRANSITION_CONFIG() -> Vec<Entry<u32>> {
         Vec::from([
-            Entry {
-                term: 0,
-                data: Data::Config(ActiveConfig::Stable(CONFIG())),
-            },
-            Entry {
-                term: 1,
-                data: Data::Config(ActiveConfig::Transition {
-                    prev: CONFIG(),
-                    new: NEW_CONFIG(),
-                }),
-            },
+            Entry::stable_config(0, TRANSACTION_ID_NONE, CONFIG()),
+            Entry::transition_config(1, TRANSACTION_ID_1, CONFIG(), NEW_CONFIG()),
         ])
     }
 
     pub fn LOG_TRANSITION_STABLE_CONFIG() -> Vec<Entry<u32>> {
         Vec::from([
-            Entry {
-                term: 0,
-                data: Data::Config(ActiveConfig::Stable(CONFIG())),
-            },
-            Entry {
-                term: 1,
-                data: Data::Config(ActiveConfig::Transition {
-                    prev: CONFIG(),
-                    new: NEW_CONFIG(),
-                }),
-            },
-            Entry {
-                term: 3,
-                data: Data::Config(ActiveConfig::Stable(NEW_CONFIG())),
-            },
+            Entry::stable_config(0, TRANSACTION_ID_NONE, CONFIG()),
+            Entry::transition_config(1, TRANSACTION_ID_1, CONFIG(), NEW_CONFIG()),
+            Entry::stable_config(3, TRANSACTION_ID_1, NEW_CONFIG()),
         ])
     }
 
@@ -320,9 +322,9 @@ pub mod test_util {
         let mut log = LOG();
         log.extend(
             [
-                Entry::command(3, 5),
-                Entry::command(3, 1),
-                Entry::command(3, 2),
+                Entry::command(3, TRANSACTION_ID_1, 5),
+                Entry::command(3, TRANSACTION_ID_2, 1),
+                Entry::command(3, TRANSACTION_ID_2, 2),
             ]
             .into_iter(),
         );
@@ -331,23 +333,23 @@ pub mod test_util {
 
     pub fn LOG() -> Vec<Entry<u32>> {
         Vec::from([
-            Entry::config(0, CONFIG()),
-            Entry::command(1, 10),
-            Entry::command(3, 4),
+            Entry::stable_config(0, TRANSACTION_ID_NONE, CONFIG()),
+            Entry::command(1, TRANSACTION_ID_2, 10),
+            Entry::command(3, TRANSACTION_ID_2, 4),
         ])
     }
 
     pub fn LOG_WITH_CLIENT() -> Vec<Entry<u32>> {
         let mut log = LOG();
-        log.extend([Entry::command(4, 100)].into_iter());
+        log.extend([Entry::command(4, TRANSACTION_ID_1, 100)].into_iter());
         log
     }
 
     pub fn MISMATCH_LOG() -> Vec<Entry<u32>> {
         Vec::from([
-            Entry::config(0, CONFIG()),
-            Entry::command(1, 10),
-            Entry::command(2, 3),
+            Entry::stable_config(0, TRANSACTION_ID_NONE, CONFIG()),
+            Entry::command(1, TRANSACTION_ID_2, 10),
+            Entry::command(2, TRANSACTION_ID_2, 3),
         ])
     }
 

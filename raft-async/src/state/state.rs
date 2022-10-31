@@ -4,7 +4,7 @@ use crate::{
     data::{
         data_type::{CommandType, OutputType},
         persistent_state::{Config, Entry, PersistentState},
-        request::Request,
+        request::{Request, TransactionId},
         volitile_state::VolitileState,
     },
     server::raft_cluster::Id,
@@ -45,7 +45,7 @@ impl<T: CommandType, SM: Default> State<T, SM> {
                 id,
                 current_term: 0,
                 voted_for: None,
-                log: [Entry::config(0, config.clone())].into(),
+                log: [Entry::stable_config(0, TransactionId::NONE, config.clone())].into(),
             },
             raft_state: RaftState::default(),
         }

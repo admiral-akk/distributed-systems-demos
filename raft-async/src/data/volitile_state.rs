@@ -23,7 +23,7 @@ impl VolitileState {
             return false;
         }
         for index in self.commit_index..new_commit_index {
-            match &persistent_state.log[index].data {
+            match &persistent_state.log[index].data.data {
                 Data::Command(command) => {
                     state_machine.apply(command.clone());
                 }

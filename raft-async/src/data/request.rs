@@ -55,6 +55,12 @@ pub enum Data<T> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Transaction<T> {
+    pub id: TransactionId,
+    pub data: Data<T>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ClientData<T> {
     Command(T),
     Config(Config),
@@ -79,8 +85,12 @@ pub struct Client<T: CommandType> {
     pub data: ClientData<T>,
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct TransactionId(pub Id, pub u32);
+
+impl TransactionId {
+    pub const NONE: TransactionId = TransactionId(Id::None, 0);
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ResponseEvent<T: CommandType, Output> {
@@ -174,6 +184,10 @@ pub mod test_util {
     }
 
     impl<In: CommandType> Insert<In> {}
+
+    pub const TRANSACTION_ID_1: TransactionId = TransactionId(Id::Client(10), 1);
+    pub const TRANSACTION_ID_2: TransactionId = TransactionId(Id::Client(10), 2);
+    pub const TRANSACTION_ID_NONE: TransactionId = TransactionId(Id::None, 0);
 
     pub const CRASH: Request<u32, u32> = Request {
         term: 0,
@@ -318,7 +332,7 @@ pub mod test_util {
         sender: CLIENT_0,
         reciever: SERVER_1,
         event: Event::Client(Client {
-            id: TransactionId(CLIENT_0, 0),
+            id: TRANSACTION_ID_1,
             data: ClientData::Command(100),
         }),
     };
@@ -349,7 +363,7 @@ pub mod test_util {
             sender: CLIENT_0,
             reciever: SERVER_1,
             event: Event::Client(Client {
-                id: TransactionId(CLIENT_0, 0),
+                id: TRANSACTION_ID_1,
                 data: ClientData::Config(NEW_CONFIG()),
             }),
         }
